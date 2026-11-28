@@ -53,14 +53,14 @@ fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
 
 /// The rows of the model shown, as a host reads them.
 fn rows_now(h: &Harness<'static, Shell>) -> std::sync::Arc<archforge_mof::rows::Rows> {
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap())
 }
 
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(archforge_ui_egui::Opened {
         name: "Commerce platform".into(),
@@ -1557,8 +1557,8 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
     }
 
     /// Builds the rows on a thread of its own, as the app's writer does, then records them.
-    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
-        let (tables, junctions) = archforge_notations::storage();
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        let (tables, junctions) = notations.storage();
         let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
         self.write(project, rows);
     }
@@ -1620,7 +1620,7 @@ fn saving_harness(opened: Option<archforge_ui_egui::Opened>, picked: Option<&str
         pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
-    let mut shell = Shell::new(services, &SCREENS);
+    let mut shell = Shell::new(services, &archforge_notations::NOTATIONS, &SCREENS);
     if let Some(opened) = opened {
         shell.open_project(opened);
     }
@@ -1946,7 +1946,7 @@ fn st_index(st: &archforge_mof::Store, package: archforge_mof::Obj) -> usize {
 /// kept in memory (`archforge_ui_egui::chat_fixture`), Claude set up when `ready`.
 fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, archforge_ui_egui::chat_fixture::Rig) {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(archforge_ui_egui::Opened {
         name: "Commerce platform".into(),

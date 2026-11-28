@@ -80,7 +80,7 @@ impl archforge_ui_egui::ProjectHost for Kept {
 /// The model of the session open as rows, as a version keeps it.
 fn rows(shell: &Shell) -> Result<Arc<Rows>, String> {
     let session = shell.session.as_ref().ok_or("the sample needs a session")?;
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     session.doc().freeze().rows(&tables, &junctions).map(Arc::new).map_err(|e| e.to_string())
 }
 

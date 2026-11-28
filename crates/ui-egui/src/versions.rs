@@ -227,10 +227,11 @@ fn keep_changes(shell: &mut Shell) {
     if shell.versions.compared.as_ref() == Some(&key) || shell.versions.comparing.is_some() {
         return;
     }
-    let (tables, junctions) = archforge_notations::storage();
+    let notations = shell.notations;
+    let (tables, junctions) = notations.storage();
     let repair = shell.open_repair();
     let v = &mut shell.versions;
-    let Some(before) = base_held(v, &key.0) else {
+    let Some(before) = base_held(notations, v, &key.0) else {
         if let Some(hash) = key.0.as_ref().filter(|hash| v.reading_base.as_ref().is_none_or(|(h, _)| h != *hash))
             && let Some((host, (path, _))) = shell.services.projects.as_ref().zip(v.about.as_ref())
         {
@@ -243,7 +244,8 @@ fn keep_changes(shell: &mut Shell) {
     let (tx, rx) = std::sync::mpsc::channel();
     let compare = move || {
         let after = frozen.rows(&tables, &junctions).map_err(|e| e.to_string());
-        let found = after.and_then(|after| archforge_notations::differences::classified(&before, &after, repair).map_err(|e| e.to_string()));
+        let found =
+            after.and_then(|after| archforge_notations::differences::classified(notations, &before, &after, repair).map_err(|e| e.to_string()));
         let _ = tx.send(found);
     };
     match std::thread::Builder::new().name("archforge-working-changes".into()).spawn(compare) {
@@ -262,13 +264,13 @@ pub(crate) fn working_key(shell: &Shell) -> Option<Compared> {
 }
 
 /// The rows of the last version `last`, when they are held. Before the first version there is no
-/// baseline, so they are empty rows and everything is added.
-pub(crate) fn base_held(v: &State, last: &Option<String>) -> Option<Arc<Rows>> {
+/// baseline, so they are empty rows in the tables of `notations` and everything is added.
+pub(crate) fn base_held(notations: &archforge_notations::Notations, v: &State, last: &Option<String>) -> Option<Arc<Rows>> {
     match (&v.base, last) {
         (Some((hash, rows)), _) if hash == last => Some(rows.clone()),
         (_, Some(_)) => None,
         (_, None) => {
-            let (tables, junctions) = archforge_notations::storage();
+            let (tables, junctions) = notations.storage();
             Some(Arc::new(Rows { tables: vec![Vec::new(); tables.len()], junctions: vec![Vec::new(); junctions.len()] }))
         }
     }

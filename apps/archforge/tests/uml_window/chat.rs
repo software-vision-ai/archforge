@@ -541,7 +541,7 @@ fn a_turns_change_that_clears_the_history_still_counts() {
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
     // The project's model again, under a history capped small enough for one long description to
     // clear it.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let old = h.state_mut().session.take().unwrap();
     let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
     // Ids at a later time than the sample's, so none is given twice.
@@ -552,11 +552,16 @@ fn a_turns_change_that_clears_the_history_still_counts() {
         r[2..].copy_from_slice(&n.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_900_000, r)
     };
-    let st = archforge_notations::store(Box::new(mint)).unwrap();
+    let st = archforge_notations::NOTATIONS.store(Box::new(mint)).unwrap();
     let st = archforge_mof::rows::restore_into_empty(st, &rows, &tables, &junctions).unwrap();
     let options = archforge_engine::Options { max_weight: 4_096, ..archforge_engine::Options::default() };
-    h.state_mut().session =
-        Some(archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, old.counter(), options, archforge_notations::view()));
+    h.state_mut().session = Some(archforge_engine::Session::with_view(
+        archforge_notations::NOTATIONS.registry().unwrap(),
+        st,
+        old.counter(),
+        options,
+        archforge_notations::NOTATIONS.view(),
+    ));
     h.run();
     let at = rect_of(&h, "workspace.chat.allow-changes").center();
     click(&mut h, at);

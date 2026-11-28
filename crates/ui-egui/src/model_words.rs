@@ -109,12 +109,12 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
 
 /// Every key these labels look up, for the catalogue tests, each with the index of the metamodel
 /// that names it, so the tests can tell whose catalogue holds its row: each property a card shows
-/// and each literal of the core and of the metamodel of each notation of `uis`, and the kinds
+/// and each literal of the core and of the metamodel of each notation of `uis` among `notations`, and the kinds
 /// ([`kinds`]) but those with a notation's word, whose rows the scan reads from each notation's
 /// [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
 #[cfg(any(test, feature = "testing"))]
-pub(crate) fn texts(uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
-    let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
+pub(crate) fn texts(notations: &archforge_notations::Notations, uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
+    let Ok(universe) = notations.universe() else { return Vec::new() };
     let mut all = Vec::new();
     for metamodel in universe.metamodels().filter(|m| in_the_model(uis, m.index)) {
         let named = |name: &str| (metamodel.index, words(name));

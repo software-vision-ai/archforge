@@ -399,7 +399,11 @@ fn reads() -> Vec<(Key, Reader)> {
     // the shell's.
     let uis = crate::SCREENS.notation_uis();
     let of_metamodel = |index: u16| uis.iter().position(|ui| ui.metamodel() == index).map_or(Reader::Shell, Reader::Notation);
-    reads.extend(archforge_ui_egui::testing::model_words(uis).into_iter().map(|(index, s)| (str_key(&s), of_metamodel(index))));
+    reads.extend(
+        archforge_ui_egui::testing::model_words(&archforge_notations::NOTATIONS, uis)
+            .into_iter()
+            .map(|(index, s)| (str_key(&s), of_metamodel(index))),
+    );
     // The in-window menu bar's access letters, keyed by each title's and row's id.
     reads.extend(
         archforge_ui_egui::testing::access_keys(crate::SCREENS.kinds()).into_iter().map(|key| (key_of("str", "access", &key), module("menu_bar"))),
@@ -649,10 +653,10 @@ fn a_files_code_is_whose_crate_it_names_and_its_tests_are_a_tests() {
 #[test]
 fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = Shell::new(Services::default(), &crate::SCREENS);
+    let _shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &crate::SCREENS);
     use archforge_mof::{DataId, DataKind, TypeRef};
     use archforge_ui_egui::model_words::{kind_label, literal_label, property_label};
-    let universe = archforge_notations::universe().unwrap();
+    let universe = archforge_notations::NOTATIONS.universe().unwrap();
     let row = |lang: &str, context: &str, key: &str| {
         let language = LANGUAGES.iter().find(|l| l.code == lang).unwrap();
         parsed(language).strings[&(context.to_string(), key.to_string())].clone()
@@ -706,10 +710,10 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
 #[test]
 fn model_words_are_said_for_the_core_and_the_notations_given() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = Shell::new(Services::default(), &crate::SCREENS);
+    let _shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &crate::SCREENS);
     use archforge_mof::{DataKind, TypeRef};
     use archforge_ui_egui::model_words::{literal_label, property_label, words};
-    let universe = archforge_notations::universe().unwrap();
+    let universe = archforge_notations::NOTATIONS.universe().unwrap();
     let german = |key: &str| parsed(LANGUAGES.iter().find(|l| l.code == "de").unwrap()).strings[&(String::new(), key.to_string())].clone();
     // A property's enumeration and the word of its first literal.
     let first_literal = |prop| {

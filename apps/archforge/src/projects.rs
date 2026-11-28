@@ -59,7 +59,8 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// writer builds, so that thread never does.
 enum Handed {
     Rows(Rows),
-    Model(Box<archforge_mof::Frozen>),
+    /// A model as frozen, with the notations it was made of, whose tables its rows are built in.
+    Model(Box<archforge_mof::Frozen>, &'static archforge_notations::Notations),
 }
 
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
@@ -1075,9 +1076,10 @@ impl ProjectHost for Projects {
         self.hand(project, Handed::Rows(rows));
     }
 
-    /// Hands the writer `project`'s model as frozen, for it to build the rows, counted as `write`'s are.
-    fn write_model(&self, project: &Path, model: archforge_mof::Frozen) {
-        self.hand(project, Handed::Model(Box::new(model)));
+    /// Hands the writer `project`'s model as frozen, made of `notations`, for it to build the rows in
+    /// their tables, counted as `write`'s are.
+    fn write_model(&self, project: &Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        self.hand(project, Handed::Model(Box::new(model), notations));
     }
 
     /// Save, under `description` when one is given. A description of the wrong shape is refused
@@ -1366,7 +1368,7 @@ fn known_kinds_only(
     stored: Option<&str>,
     lookup: impl FnOnce(&str) -> Result<SafeBranch, archforge_project::StoredBranch>,
 ) -> Result<KindsUnread, CreateError> {
-    let (known, main) = (archforge_notations::kinds(), SafeBranch::default());
+    let (known, main) = (archforge_notations::NOTATIONS.kinds(), SafeBranch::default());
     let (mut kinds, mut read, mut unread) = (Vec::new(), false, None);
     let not_read = |on: &str, why: &dyn std::fmt::Display| {
         log::warn!("the diagram kinds of {} on {on} were not read: {why}", project.path().display());
@@ -1572,8 +1574,8 @@ fn schema(inner: &Inner) -> Result<Arc<ModelSchema>, CreateError> {
         return Ok(s.clone());
     }
     let failed = |detail: String| CreateError::Failed { detail };
-    let universe = archforge_notations::store(Box::new(|| archforge_mof::Uuid([0; 16]))).map_err(failed)?.universe().clone();
-    let (tables, junctions) = archforge_notations::storage();
+    let universe = archforge_notations::NOTATIONS.store(Box::new(|| archforge_mof::Uuid([0; 16]))).map_err(failed)?.universe().clone();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let s = Arc::new(ModelSchema::new(&universe, tables, junctions).map_err(failed)?);
     *held = Some(s.clone());
     Ok(s)
@@ -1763,8 +1765,8 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Handed>) {
         let Some(handed) = waiting.get_mut(&target) else { continue };
         // A model handed over frozen is built here, off the interface thread, once: a write that
         // fails after keeps its rows. One that can't be built waits as a write that failed does.
-        if let Handed::Model(model) = handed {
-            let (tables, junctions) = archforge_notations::storage();
+        if let Handed::Model(model, notations) = handed {
+            let (tables, junctions) = notations.storage();
             match model.rows(&tables, &junctions) {
                 Ok(rows) => *handed = Handed::Rows(rows),
                 Err(e) => {
@@ -1898,7 +1900,7 @@ fn checked_target<T>(
 /// scripted is refused for that, as before.
 fn known_kinds_on(project: &Project, target: &SafeBranch) -> Result<(), SwitchError> {
     project.check_branch_settings(target).map_err(SwitchError::Checks)?;
-    let accepted = archforge_notations::kinds();
+    let accepted = archforge_notations::NOTATIONS.kinds();
     let kinds = project.unknown_diagram_kinds(target, &accepted).map_err(SwitchError::Checks)?;
     if kinds.is_empty() { Ok(()) } else { Err(SwitchError::UnsupportedKinds { kinds, accepted }) }
 }
@@ -1970,7 +1972,7 @@ fn restore(
     // is never written in (AR-551).
     known_kinds_in(&version)?;
     let current = project.read_model(&schema).map_err(|e| RestoreError::Failed(e.to_string()))?;
-    if !differs(archforge_notations::differences::classified(&current, &version, &request.repair))? {
+    if !differs(archforge_notations::differences::classified(&archforge_notations::NOTATIONS, &current, &version, &request.repair))? {
         return Ok(Restored::Same { kept_work: false });
     }
     let replaced = replace(inner, project, &schema, &request, &version, watch);
@@ -2003,8 +2005,8 @@ const RESTORED_KIND_BYTES: usize = 256;
 /// once, and at most [`MOST_UNKNOWN_KINDS`]; and the kinds the notations know. The notations'
 /// check gives each such diagram; of those, only the kinds named are copied into the refusal.
 fn known_kinds_in(rows: &Rows) -> Result<(), RestoreError> {
-    let (tables, _) = archforge_notations::storage();
-    archforge_notations::check_kinds_in_rows(rows, &tables).map_err(|refused| {
+    let (tables, _) = archforge_notations::NOTATIONS.storage();
+    archforge_notations::NOTATIONS.check_kinds_in_rows(rows, &tables).map_err(|refused| {
         let mut kinds: Vec<String> = Vec::new();
         for kind in refused.diagrams.iter().map(|d| archforge_ui_egui::chat_panel::cut(&d.kind, RESTORED_KIND_BYTES)) {
             if kinds.len() >= MOST_UNKNOWN_KINDS {
@@ -3357,10 +3359,10 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         });
-        let mut s = archforge_notations::new_project_session("Commerce platform", ids).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids).unwrap();
         s.execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
         s.execute("uml.package.add", &serde_json::json!({ "name": "Domain" })).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
@@ -3397,9 +3399,9 @@ mod tests {
 
     /// A model's rows: a project with one schema of the given name.
     fn model(schema: &str) -> Rows {
-        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", counted_ids()).unwrap();
         s.execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
@@ -3915,7 +3917,7 @@ mod tests {
 
     /// What an opening does to a model with the app's notations, as a shell hands it to the host.
     fn opening_repair() -> impl Fn(&mut archforge_mof::Store) + Copy + Send + 'static {
-        archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &crate::SCREENS).open_repair()
+        archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &crate::SCREENS).open_repair()
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -3969,7 +3971,7 @@ mod tests {
         assert_eq!(saved(host, &path), Ok(true));
         let known = version(host, 0);
         let mut legacy = structure_diagram();
-        let (tables, _) = archforge_notations::storage();
+        let (tables, _) = archforge_notations::NOTATIONS.storage();
         let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
         let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
         legacy.tables[at].iter_mut().for_each(|row| row[kind] = archforge_mof::rows::Cell::Text("uml.class".into()));
@@ -4006,7 +4008,7 @@ mod tests {
     #[test]
     fn a_refused_restore_names_each_kind_cut_once_and_at_most_the_most() {
         let mut rows = structure_diagram();
-        let (tables, _) = archforge_notations::storage();
+        let (tables, _) = archforge_notations::NOTATIONS.storage();
         let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
         let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
         let long = format!("{}é", "k".repeat(RESTORED_KIND_BYTES - 1));
@@ -4077,7 +4079,7 @@ mod tests {
     /// A table box too short for its columns, as an earlier version left it, and the same box as
     /// an opening fits it: the two differ only by that repair.
     fn short_and_fitted_box() -> (Rows, Rows) {
-        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", counted_ids()).unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let shop = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
         let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": shop, "name": "customer" })).unwrap().value);
@@ -4085,9 +4087,9 @@ mod tests {
         let diagram =
             id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 })).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let short = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), opening_repair()).unwrap();
+        let fitted = archforge_notations::NOTATIONS.session_from_rows_repaired(&short, counted_ids(), opening_repair()).unwrap();
         let fitted = archforge_mof::rows::snapshot(fitted.doc(), &tables, &junctions).unwrap();
         assert_ne!(short, fitted, "the repair changes the box");
         (short, fitted)
@@ -6515,10 +6517,10 @@ mod tests {
 
     /// A model's rows: a project with a package `Sales` and a UML structure diagram of it.
     fn structure_diagram() -> Rows {
-        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", counted_ids()).unwrap();
         let sales = s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value["id"].as_str().unwrap().to_string();
         s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
@@ -6581,7 +6583,7 @@ mod tests {
         let left = stored();
         let refused = switch_to(host, &path, "kinds");
         assert!(
-            matches!(&refused, Err(SwitchError::UnsupportedKinds { kinds, accepted }) if kinds == &["uml.class"] && accepted == &archforge_notations::kinds()),
+            matches!(&refused, Err(SwitchError::UnsupportedKinds { kinds, accepted }) if kinds == &["uml.class"] && accepted == &archforge_notations::NOTATIONS.kinds()),
             "{refused:?}"
         );
         assert_eq!(stored(), left, "nothing written to the branch, and no branch made or removed");
@@ -7114,7 +7116,7 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         };
-        let mut s = archforge_notations::new_project_session("MVPFlowReview", Box::new(ids)).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("MVPFlowReview", Box::new(ids)).unwrap();
         let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
         id("skill.add", serde_json::json!({ "name": "Review export conventions", "body": "Everywhere." }));
         let package = id("uml.package.add", serde_json::json!({ "name": "Review domain" }));
@@ -7122,7 +7124,7 @@ mod tests {
         let diagram = id("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Review domain" }));
         id("diagram.place", serde_json::json!({ "diagram": diagram, "element": invoice, "x": 100, "y": 120 }));
         id("skill.add", serde_json::json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let rows = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
         host.write(&path, rows.clone());
         assert_eq!(saved(&host, &path), Ok(true));
@@ -7132,7 +7134,7 @@ mod tests {
         let back = wait(&host.open(&path)).unwrap();
         assert_eq!(back.model.as_deref(), Some(&rows));
         let more = Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [7; 10]));
-        let session = archforge_notations::session_from_rows(back.model.as_deref().unwrap(), more).expect("the model opens");
+        let session = archforge_notations::NOTATIONS.session_from_rows(back.model.as_deref().unwrap(), more).expect("the model opens");
         let st = session.doc();
         let bodies: Vec<String> = archforge_core::skills::skills(st)
             .into_iter()
@@ -7148,7 +7150,7 @@ mod tests {
 
     /// A model that no table can hold: an unlimited natural past what a cell stores.
     fn unbuildable() -> archforge_mof::Frozen {
-        let mut st = archforge_notations::store(counted_ids()).unwrap();
+        let mut st = archforge_notations::NOTATIONS.store(counted_ids()).unwrap();
         let u = st.universe().clone();
         let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
         let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
@@ -7163,18 +7165,18 @@ mod tests {
     fn the_writer_builds_and_writes_a_frozen_model() {
         let sandbox = Sandbox::new(None);
         let (host, path) = (&sandbox.host, sandbox.project());
-        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", counted_ids()).unwrap();
         s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
-        host.write_model(&path, s.doc().freeze());
+        host.write_model(&path, s.doc().freeze(), &archforge_notations::NOTATIONS);
         assert_eq!(saved(host, &path), Ok(true));
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         assert_eq!(work(host), archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), "the rows of the model handed over");
-        host.write_model(&path, unbuildable());
+        host.write_model(&path, unbuildable(), &archforge_notations::NOTATIONS);
         let answer = saved(host, &path);
         let why = host.writing(&path).error.unwrap_or_default();
         assert!(matches!(&answer, Err(SaveError::Failed(e)) if *e == why), "a model that could not be written is not saved: {answer:?}");
         assert!(why.contains("too large to store") && host.writing(&path).pending, "it waits, and the status bar says why: {why}");
-        host.write_model(&path, s.doc().freeze());
+        host.write_model(&path, s.doc().freeze(), &archforge_notations::NOTATIONS);
         assert_eq!(saved(host, &path), Ok(false), "the same model again leaves nothing to commit");
         assert_eq!(host.writing(&path), Writing::default(), "and clears the failure");
     }

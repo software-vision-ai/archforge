@@ -352,7 +352,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Saved and opened again, the package leads to the same diagram.
         let rows = {
-            let (tables, junctions) = archforge_notations::storage();
+            let (tables, junctions) = archforge_notations::NOTATIONS.storage();
             archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap()
         };
         let mut again = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
@@ -436,7 +436,7 @@ fn entry_reaches_the_bound_default_never_the_first_found_and_makes_nothing_witho
         h.state_mut().state.language = "de".into();
         back_on_top(&mut h, billing);
         let rows = |h: &Harness<'static, Shell>| {
-            let (tables, junctions) = archforge_notations::storage();
+            let (tables, junctions) = archforge_notations::NOTATIONS.storage();
             let s = h.state().session.as_ref().unwrap();
             (archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(str::to_string))
         };
@@ -2153,9 +2153,9 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     );
     assert!(archforge_ui_egui::testing::search_hits(&index, "ord").1.iter().any(|e| e.label == "Order"));
     // Saved and opened again, as the project's rows: the class diagram comes back.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
-    let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+    let back = archforge_notations::NOTATIONS.session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
     let st = back.doc();
     let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
     assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
@@ -2526,9 +2526,9 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert_eq!(height(&h), grown);
         assert!(on_card(&h, "+ approveAll()"), "{:?}", painted(&h));
         // Saved and opened again from the project's rows, the card keeps its size.
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
-        let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+        let back = archforge_notations::NOTATIONS.session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
         let st = back.doc();
         assert_eq!(archforge_diagram::grid::bounds_of(st, st.by_uuid(node).unwrap()).height, grown);
         assert_eq!(archforge_uml::members::operations(st, st.by_uuid(class).unwrap()).len(), 2);
@@ -4881,7 +4881,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let s = h.state_mut().session.as_mut().unwrap();
         let twin = s.execute("uml.dependency.add", &serde_json::json!({ "client": line.to_string(), "supplier": order.to_string() })).unwrap();
         let twin = archforge_mof::Uuid::parse(twin.value["id"].as_str().unwrap()).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let old = h.state_mut().session.take().unwrap();
         let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
         let mut n = 0u64;
@@ -4892,7 +4892,8 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
             archforge_mof::Uuid::v7(1_761_670_900_000, r)
         };
         let mut st =
-            archforge_mof::rows::restore_into_empty(archforge_notations::store(Box::new(mint)).unwrap(), &rows, &tables, &junctions).unwrap();
+            archforge_mof::rows::restore_into_empty(archforge_notations::NOTATIONS.store(Box::new(mint)).unwrap(), &rows, &tables, &junctions)
+                .unwrap();
         let (d, was, now) = (st.by_uuid(twin).unwrap(), st.by_uuid(order).unwrap(), st.by_uuid(order_status).unwrap());
         st.remove_value(d, archforge_uml::dependency::SUPPLIER, &archforge_mof::Value::Ref(was)).unwrap();
         st.push(d, archforge_uml::dependency::SUPPLIER, archforge_mof::Value::Ref(now)).unwrap();
@@ -4900,7 +4901,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         assert_eq!(parallel.len(), 2, "{theme:?}: two parallel dependencies loaded");
         let view = old.view().clone();
         h.state_mut().session = Some(archforge_engine::Session::with_view(
-            archforge_notations::registry().unwrap(),
+            archforge_notations::NOTATIONS.registry().unwrap(),
             st,
             old.counter(),
             archforge_engine::Options::default(),
@@ -5504,7 +5505,12 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
         };
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(
-            archforge_ui_egui::testing::skill_target_word(archforge_ui_egui::testing::notation_uis(h.state()), st, st.by_uuid(skill).unwrap()),
+            archforge_ui_egui::testing::skill_target_word(
+                h.state().session.as_ref().unwrap().view(),
+                archforge_ui_egui::testing::notation_uis(h.state()),
+                st,
+                st.by_uuid(skill).unwrap()
+            ),
             "every primitive type"
         );
         // A built-in type, selected, carries none: the panel says so in place of +.

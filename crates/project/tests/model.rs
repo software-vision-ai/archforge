@@ -95,8 +95,8 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
 }
 
 fn schema() -> ModelSchema {
-    let universe = archforge_notations::store(ids(0)).unwrap().universe().clone();
-    let (tables, junctions) = archforge_notations::storage();
+    let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
@@ -106,7 +106,7 @@ fn run(s: &mut Session, cmd: &str, p: Json) -> String {
 }
 
 fn model() -> Session {
-    let mut s = archforge_notations::new_project_session("Commerce platform", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Kunde · 顧客" }));
     run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));
@@ -153,7 +153,7 @@ fn a_saved_model_opens_again_identical_and_the_unsaved_state_follows() {
     let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
     again.prepare_model(&schema).unwrap();
     let read = again.read_model(&schema).unwrap();
-    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
+    let mut back = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut back, &read, schema.tables(), &schema.junctions()).unwrap();
     assert_eq!(rows_of(&back, &schema), written, "the model comes back identical");
     // The last save is in the history with its message.
@@ -197,7 +197,7 @@ fn untouched(project: &Project) -> (String, String, i64, i64) {
 
 /// Rows read back, in the order a snapshot gives them, so they compare with rows written.
 fn restored(read: &rows::Rows, schema: &ModelSchema) -> rows::Rows {
-    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
+    let mut back = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut back, read, schema.tables(), &schema.junctions()).unwrap();
     rows_of(&back, schema)
 }
@@ -482,7 +482,7 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
     drop(c);
     project.prepare_model(&schema).unwrap();
     let read = project.read_model(&schema).unwrap();
-    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
+    let mut back = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut back, &read, schema.tables(), &schema.junctions()).unwrap();
     let mut c = project.server().connect().unwrap();
     c.query_drop("USE project").unwrap();
@@ -593,7 +593,7 @@ fn er_and_uml_live_in_one_project_and_a_project_of_er_alone_takes_uml() {
     // Opened by this Archforge: brought up to date, and its ER model reads back as it was.
     let project = Project::open(&env.dolt, &env.opts(), &path).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+    let mut st = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut st, &project.read_model(&schema).unwrap(), schema.tables(), &schema.junctions()).unwrap();
     assert_eq!(rows_of(&st, &schema), rows_of(s.doc(), &schema));
     // A UML package with a class beside the ER schema, in a folder of the same Model, with a
@@ -619,7 +619,7 @@ fn er_and_uml_live_in_one_project_and_a_project_of_er_alone_takes_uml() {
     project.prepare_model(&schema).unwrap();
     let read = project.read_model(&schema).unwrap();
     assert_eq!(read, both, "ER and UML come back side by side");
-    let session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    let session = archforge_notations::NOTATIONS.session_from_rows(&read, ids(1 << 41)).unwrap();
     assert!(session.doc().alive().any(|o| session.doc().class_of(o).ok() == Some(archforge_uml::CLASS)));
     project.close().unwrap();
 }
@@ -633,7 +633,7 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     let schema = schema();
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
     let priority = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" }));
@@ -650,7 +650,7 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     again.prepare_model(&schema).unwrap();
     let read = again.read_model(&schema).unwrap();
     assert_eq!(read, written, "the rows come back as written");
-    let session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    let session = archforge_notations::NOTATIONS.session_from_rows(&read, ids(1 << 41)).unwrap();
     let st = session.doc();
     let o = st.by_uuid(Uuid::parse(&order).unwrap()).unwrap();
     let names: Vec<String> = archforge_uml::nesting::nested(st, o).into_iter().map(|c| archforge_core::name_of(st, c)).collect();
@@ -749,7 +749,7 @@ fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: 
     let read = project.read_model(schema).unwrap();
     project.close().unwrap();
     assert_eq!(read, written, "{message}: the rows come back as written");
-    archforge_notations::session_from_rows(&read, ids(1 << 44)).map_err(String::from)
+    archforge_notations::NOTATIONS.session_from_rows(&read, ids(1 << 44)).map_err(String::from)
 }
 
 /// AR-208: a project whose names differ only in case across kinds (an attribute and an operation,
@@ -781,7 +781,7 @@ fn names_shared_across_kinds_are_saved_and_the_project_opens_again() {
     assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
     // Saved before the fix, written straight into the store as no command would now: a data
     // type's attribute and operation named alike, and a package beside a classifier of its name.
-    let mut st = archforge_notations::store(ids(1 << 42)).unwrap();
+    let mut st = archforge_notations::NOTATIONS.store(ids(1 << 42)).unwrap();
     rows::restore(&mut st, &rows_of(s.doc(), &schema), schema.tables(), &schema.junctions()).unwrap();
     let sales = st.by_uuid(Uuid::parse(&sales).unwrap()).unwrap();
     let named = |st: &mut Store, owner, prop, class, name: &str| {
@@ -869,7 +869,7 @@ fn template_parameters_are_saved_and_opened_again() {
     let schema = schema();
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let entity = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Entity" }));
     let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
@@ -889,7 +889,7 @@ fn template_parameters_are_saved_and_opened_again() {
     again.prepare_model(&schema).unwrap();
     let read = again.read_model(&schema).unwrap();
     assert_eq!(read, written, "the rows come back as written");
-    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    let mut session = archforge_notations::NOTATIONS.session_from_rows(&read, ids(1 << 41)).unwrap();
     assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
     let st = session.doc();
     let r = st.by_uuid(Uuid::parse(&repo).unwrap()).unwrap();
@@ -910,7 +910,7 @@ fn template_bindings_are_saved_and_opened_again() {
     let schema = schema();
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
     let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
@@ -933,7 +933,7 @@ fn template_bindings_are_saved_and_opened_again() {
     again.prepare_model(&schema).unwrap();
     let read = again.read_model(&schema).unwrap();
     assert_eq!(read, written, "the rows come back as written");
-    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    let mut session = archforge_notations::NOTATIONS.session_from_rows(&read, ids(1 << 41)).unwrap();
     assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
     assert_eq!(session.execute("uml.template-binding.list", &json!({ "classifier": bound })).unwrap().value, before);
     let st = session.doc();
@@ -951,12 +951,12 @@ fn a_version_reports_the_binding_problems_it_was_saved_with() {
     let schema = schema();
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Defaults", "test", &timestamp(1_761_670_800)).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut s = archforge_notations::new_project_session("Defaults", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Defaults", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
     let sound = rows_of(s.doc(), &schema);
     // A second binding of Sales, as no command makes one: two defaults.
-    let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+    let mut st = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut st, &sound, schema.tables(), &schema.junctions()).unwrap();
     let [binding] = archforge_diagram::defaults::bindings(&st)[..] else { panic!("Sales's diagram is bound") };
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
@@ -976,7 +976,7 @@ fn a_version_reports_the_binding_problems_it_was_saved_with() {
 
     let before = untouched(&project);
     let problems = |read: &rows::Rows, rows: &rows::Rows| {
-        let mut opened = archforge_notations::session_from_rows_diagnosed(read, ids(1 << 41), |_| {}).unwrap();
+        let mut opened = archforge_notations::NOTATIONS.session_from_rows_diagnosed(read, ids(1 << 41), |_| {}).unwrap();
         opened.session.set_read_only(true).unwrap();
         let st = opened.session.doc();
         assert_eq!(&rows_of(st, &schema), rows, "opened as it was saved");
@@ -999,7 +999,7 @@ fn a_version_from_before_a_package_move_keeps_its_owner_and_appearances() {
     let schema = schema();
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Moved", "test", &timestamp(1_761_670_800)).unwrap();
     project.prepare_model(&schema).unwrap();
-    let mut s = archforge_notations::new_project_session("Moved", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Moved", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
@@ -1020,7 +1020,7 @@ fn a_version_from_before_a_package_move_keeps_its_owner_and_appearances() {
     let (then, now) = (project.read_model_at(&schema, &version).unwrap(), project.read_model(&schema).unwrap());
     // Its owner, and each appearance as its node and the diagram holding it, in id order.
     let read = |rows: &rows::Rows| {
-        let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+        let mut st = archforge_notations::NOTATIONS.store(ids(1 << 40)).unwrap();
         rows::restore(&mut st, rows, schema.tables(), &schema.junctions()).unwrap();
         let package = st.by_uuid(Uuid::parse(&orders).unwrap()).unwrap();
         let owner = archforge_uml::commands::package_of(&st, package).map(|p| archforge_core::name_of(&st, p));
@@ -1031,7 +1031,7 @@ fn a_version_from_before_a_package_move_keeps_its_owner_and_appearances() {
     };
     assert_eq!(read(&then), (saved, Some("Sales".into()), vec![[shown.clone(), sales_d.clone()]]), "the version as it was saved");
     assert_eq!(read(&now), (work, Some("Billing".into()), vec![[shown, sales_d], [placed.clone(), billing_d]]), "the work moved and placed");
-    let found = archforge_notations::differences::classified(&then, &now, |_| {}).unwrap();
+    let found = archforge_notations::differences::classified(&archforge_notations::NOTATIONS, &then, &now, |_| {}).unwrap();
     let areas: Vec<_> = found.iter().map(|d| (d.id.to_string(), d.area, d.kind)).collect();
     use archforge_notations::differences::{Area, ChangeKind};
     assert_eq!(

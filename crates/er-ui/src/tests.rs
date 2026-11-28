@@ -34,7 +34,7 @@ fn test_ids() -> Box<dyn FnMut() -> Uuid + Send> {
 fn context() -> TestContext {
     set_language("en");
     let mut tc = TestContext::new(UIS).unwrap();
-    tc.session = Some(archforge_notations::new_project_session("Commerce platform", test_ids()).unwrap());
+    tc.session = Some(archforge_notations::NOTATIONS.new_project_session("Commerce platform", test_ids()).unwrap());
     tc
 }
 

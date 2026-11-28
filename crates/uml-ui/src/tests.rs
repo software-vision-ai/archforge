@@ -47,7 +47,7 @@ fn test_ids() -> Box<dyn FnMut() -> Uuid + Send> {
 fn context() -> TestContext {
     set_language("en");
     let mut tc = TestContext::new(UIS).unwrap();
-    tc.session = Some(archforge_notations::new_project_session("Commerce platform", test_ids()).unwrap());
+    tc.session = Some(archforge_notations::NOTATIONS.new_project_session("Commerce platform", test_ids()).unwrap());
     tc
 }
 
@@ -1196,9 +1196,9 @@ fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_lin
     }
     assert_eq!(revision(h.state()), before);
     // Saved and opened again, as the project's rows: the ends keep their multiplicities.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
-    let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+    let back = archforge_notations::NOTATIONS.session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
     let st = back.doc();
     let ends = archforge_uml::figures::member_ends(st, st.by_uuid(paid).unwrap()).unwrap();
     assert_eq!(ends.map(|e| archforge_uml::figures::multiplicity(st, e)), s(["1..*", "2..5"]));
@@ -1668,7 +1668,7 @@ fn an_association_end_takes_stereotypes_in_its_part_of_properties() {
 #[test]
 fn a_uml_cards_menu_adds_the_row_its_adorner_names() {
     use archforge_shell_api::kinds::DiagramKind;
-    let mut st = archforge_notations::store(test_ids()).unwrap();
+    let mut st = archforge_notations::NOTATIONS.store(test_ids()).unwrap();
     let [class, enumeration, primitive] =
         [archforge_uml::CLASS, archforge_uml::ENUMERATION, archforge_uml::PRIMITIVE_TYPE].map(|c| st.create(c).unwrap());
     let rows =

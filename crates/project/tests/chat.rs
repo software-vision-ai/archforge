@@ -96,13 +96,13 @@ fn at(n: u64) -> String {
 }
 
 fn schema() -> ModelSchema {
-    let universe = archforge_notations::store(ids(0)).unwrap().universe().clone();
-    let (tables, junctions) = archforge_notations::storage();
+    let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
 fn session() -> Session {
-    archforge_notations::new_project_session("Commerce platform", ids(0)).unwrap()
+    archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap()
 }
 
 fn run(s: &mut Session, cmd: &str, p: serde_json::Value, origin: Option<&str>) -> Uuid {
@@ -1183,8 +1183,8 @@ fn an_older_chat_row_without_the_chips_column_reads_as_none_removed() {
 
 #[test]
 fn a_model_table_may_not_take_a_conversations_name() {
-    let universe = archforge_notations::store(ids(0)).unwrap().universe().clone();
-    let (mut tables, junctions) = archforge_notations::storage();
+    let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
+    let (mut tables, junctions) = archforge_notations::NOTATIONS.storage();
     tables[0].name = "chat_note";
     assert!(ModelSchema::new(&universe, tables, junctions).is_err_and(|e| e.contains("chat_note")));
 }

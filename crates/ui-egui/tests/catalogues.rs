@@ -26,7 +26,7 @@ fn a_refusal_said_before_any_other_lookup_is_translated() {
     assert_eq!(refusal(&[], &EngineError::ReadOnly), german, "the interfaces' own row is in before a shell is made");
     let root = Subject::root("Demo");
     assert_eq!((root.kind.as_str(), root.word.as_str()), ("Modell · die Wurzel des Projekts", "Model"), "the shell's catalogue is not in yet");
-    let _shell = Shell::new(Services::default(), &SCREENS);
+    let _shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     assert_eq!(Subject::root("Demo").word, "Modell", "the shell registered its catalogue");
     assert_eq!(refusal(&[], &EngineError::ReadOnly), german);
 }

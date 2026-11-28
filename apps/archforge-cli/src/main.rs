@@ -191,7 +191,7 @@ fn infos() -> Result<Vec<Value>, String> {
         n = n.wrapping_add(1);
         archforge_mof::Uuid(n.to_le_bytes())
     });
-    let session = archforge_notations::new_project_session("Model", ids)?;
+    let session = archforge_notations::NOTATIONS.new_project_session("Model", ids)?;
     session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).map_err(|e| e.to_string())).collect()
 }
 
@@ -389,7 +389,7 @@ mod tests {
             n = n.wrapping_add(1);
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut engine = archforge_notations::new_project_session("Model", ids).unwrap();
+        let mut engine = archforge_notations::NOTATIONS.new_project_session("Model", ids).unwrap();
         let mut driven = 0;
         for c in &all {
             let id = c["id"].as_str().unwrap();
@@ -504,7 +504,7 @@ mod tests {
             n = n.wrapping_add(1);
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut engine = archforge_notations::new_project_session("Model", ids).unwrap();
+        let mut engine = archforge_notations::NOTATIONS.new_project_session("Model", ids).unwrap();
         let schema = engine.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
         engine.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer" })).unwrap();
         let package = engine.execute("uml.package.add", &json!({ "name": "sales" })).unwrap().value["id"].as_str().unwrap().to_string();
@@ -537,7 +537,7 @@ mod tests {
         let all = infos().unwrap();
         let ids: Vec<&str> = all.iter().map(|c| c["id"].as_str().unwrap()).collect();
         let mut scopes = Vec::new();
-        let kinds = archforge_notations::kinds();
+        let kinds = archforge_notations::NOTATIONS.kinds();
         for (compact, read_only) in [(false, false), (true, false), (false, true), (true, true)] {
             let catalog = archforge_mcp::Catalog::new(&all, compact).read_only(read_only);
             let list = catalog.list();

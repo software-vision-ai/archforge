@@ -951,11 +951,12 @@ fn unbuildable(h: &mut Harness<'static, Shell>) {
         r[2..].copy_from_slice(&n.to_be_bytes());
         Uuid::v7(1_761_670_950_000, r)
     });
-    let s = archforge_notations::session_from_rows_repaired(&rows_now(h), ids, |st| {
-        let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
-        st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
-    })
-    .unwrap();
+    let s = NOTATIONS
+        .session_from_rows_repaired(&rows_now(h), ids, |st| {
+            let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
+            st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+        })
+        .unwrap();
     h.state_mut().written = Some(s.revision());
     h.state_mut().session = Some(s);
 }

@@ -10,6 +10,7 @@
 //! line over it, a field is 28 px tall and filled, its label 11 px above, a row 36 px, an editor
 //! a bordered card.
 
+use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Vec2, pos2, vec2};
 use serde_json::json;
@@ -384,26 +385,31 @@ struct SkillRow {
     own: bool,
 }
 
-/// What a skill aims at, as the Skills panel says it: the words of the notation among `uis` whose
-/// kind it names ([`NotationUi::skill_target`](crate::notation_ui::NotationUi::skill_target));
+/// What a skill aims at in a project seen through `view`, as the Skills panel says it: the words of
+/// the notation among `uis` whose kind it names ([`NotationUi::skill_target`](crate::notation_ui::NotationUi::skill_target));
 /// where that notation has none, the skill's type pattern; nothing for a skill that names no kind.
-pub(crate) fn target_word(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, s: Obj) -> String {
+pub(crate) fn target_word(view: &ProjectView, uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
-    let Some((kind, _)) = archforge_core::skills::kind_by_key(&archforge_notations::view(), store, &applies) else { return String::new() };
+    let Some((kind, _)) = archforge_core::skills::kind_by_key(view, store, &applies) else { return String::new() };
     crate::notation_ui::of_class(uis, kind).and_then(|ui| ui.skill_target(kind, &pattern)).unwrap_or(pattern)
 }
 
-/// The selection's own skills and those it inherits, each as its row says it, the targets in the
-/// words of the notations among `uis` ([`target_word`]).
-fn skill_rows(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>) {
+/// The selection's own skills and those it inherits in a project seen through `view`, each as its
+/// row says it, the targets in the words of the notations among `uis` ([`target_word`]).
+fn skill_rows(
+    view: &ProjectView,
+    uis: &[&'static dyn crate::notation_ui::NotationUi],
+    store: &Store,
+    subject: &Subject,
+) -> (Vec<SkillRow>, Vec<SkillRow>) {
     let this = subject.this.clone();
     let subject = subject.obj;
     let own: Vec<SkillRow> = archforge_core::skills::skills(store)
         .into_iter()
         .filter(|s| archforge_core::skills::subject_of(store, *s) == subject)
         .filter_map(|s| {
-            let target = target_word(uis, store, s);
+            let target = target_word(view, uis, store, s);
             Some(SkillRow {
                 id: store.uuid(s).ok()?,
                 name: archforge_core::skills::name_of(store, s),
@@ -413,7 +419,7 @@ fn skill_rows(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store
         })
         .collect();
     let inherited = match subject {
-        Some(element) => archforge_core::skills::effective_skills(&archforge_notations::view(), store, element, None)
+        Some(element) => archforge_core::skills::effective_skills(view, store, element, None)
             .into_iter()
             .filter(|e| e.origin != Some(element))
             .filter_map(|e| {
@@ -450,7 +456,7 @@ fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let (own, inherited) = match shell.session.as_ref() {
-        Some(s) => skill_rows(shell.notation_uis, s.doc(), subject),
+        Some(s) => skill_rows(s.view(), shell.notation_uis, s.doc(), subject),
         None => return,
     };
     let none = no_skills(shell, subject);

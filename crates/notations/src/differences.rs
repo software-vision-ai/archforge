@@ -17,7 +17,7 @@ use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot}
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Property, Store, TypeRef, Uuid, Value};
 
-use crate::{labels, storage, store};
+use crate::{Notations, labels};
 
 mod related;
 
@@ -280,12 +280,13 @@ fn kinds_between(old: &Rows, new: &Rows, tables: &[Table], junctions: &[Junction
     Ok(kinds)
 }
 
-/// Classifies and names what differs between `before` and `after`, sorted by id. `repair` is what
-/// an opening does to a store, applied to a private copy of each side.
-pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
-    let (tables, junctions) = storage();
-    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+/// Classifies and names what differs between `before` and `after`, two states of a project of
+/// `notations`, sorted by id. `repair` is what an opening does to a store, applied to a private copy
+/// of each side.
+pub fn classified(notations: &Notations, before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
+    let (tables, junctions) = notations.storage();
+    let (old, old_rows) = repaired(notations, "before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired(notations, "after", after, &tables, &junctions, &repair)?;
     let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
     let named = |((id, class), kind): ((Uuid, ClassId), ChangeKind)| {
         let (name, path) = name_and_path(if kind == ChangeKind::Removed { &old } else { &new }, id);
@@ -305,13 +306,20 @@ fn area_of(class: ClassId) -> Area {
     }
 }
 
-/// The two sides of the element `id` between `before` and `after`, each restored and repaired as
+/// The two sides of the element `id` between `before` and `after`, two states of a project of
+/// `notations`, each restored and repaired as
 /// [`classified`] does it, so a card and the list read the same states. Built for one selected
 /// element from rows the caller holds; `Ok(None)` when neither side has the element.
-pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<ElementSides>, ClassifyError> {
-    let (tables, junctions) = storage();
-    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+pub fn element_sides(
+    notations: &Notations,
+    before: &Rows,
+    after: &Rows,
+    id: Uuid,
+    repair: impl Fn(&mut Store),
+) -> Result<Option<ElementSides>, ClassifyError> {
+    let (tables, junctions) = notations.storage();
+    let (old, old_rows) = repaired(notations, "before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired(notations, "after", after, &tables, &junctions, &repair)?;
     let (card_before, was) = read_side("before", &old, id)?.unzip();
     let (card_after, is) = read_side("after", &new, id)?.unzip();
     if card_before.is_none() && card_after.is_none() {
@@ -344,23 +352,25 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
 }
 
 /// The two sides of the diagram that holds the item `id`, a box or a line of it or the diagram
-/// itself, each restored and repaired as [`classified`] does it. `Ok(None)` when neither side has one.
-pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<DiagramSides>, ClassifyError> {
-    let (tables, junctions) = storage();
-    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+/// itself, in two states of a project of `notations`, each restored and repaired as [`classified`] does it. `Ok(None)` when neither side has one.
+pub fn diagram_sides(
+    notations: &Notations,
+    before: &Rows,
+    after: &Rows,
+    id: Uuid,
+    repair: impl Fn(&mut Store),
+) -> Result<Option<DiagramSides>, ClassifyError> {
+    let (tables, junctions) = notations.storage();
+    let (old, old_rows) = repaired(notations, "before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired(notations, "after", after, &tables, &junctions, &repair)?;
     let holder = |store: &Store| store.by_uuid(id).and_then(|o| diagram_of(store, o)).and_then(|d| store.uuid(d).ok());
     let Some(diagram) = holder(&new).or_else(|| holder(&old)) else { return Ok(None) };
     let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
     let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
     let (marks, mut apart) = marks_of(&changed, [("before", &old), ("after", &new)], diagram)?;
-    let notations = crate::view();
+    let view = notations.view();
     let side = |store: Store| {
-        store.by_uuid(diagram).map(|d| DiagramSide {
-            grid: Grid::build_with(&store, d, |n| notations.node_drawn_behind(&store, n)),
-            diagram: d,
-            store,
-        })
+        store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build_with(&store, d, |n| view.node_drawn_behind(&store, n)), diagram: d, store })
     };
     let (before, after) = (side(old), side(new));
     apart.itself = before.is_some() && after.is_some() && changed.contains(&diagram);
@@ -680,8 +690,10 @@ fn aligned(was: &[(PropId, Value)], is: &[(PropId, Value)], on_both: bool) -> Ve
     props.map(field).collect()
 }
 
-/// `rows` restored into a store of their own and repaired, with the rows of the repaired store.
+/// `rows` restored into a store of `notations` of their own and repaired, with the rows of the
+/// repaired store.
 fn repaired(
+    notations: &Notations,
     side: &'static str,
     rows: &Rows,
     tables: &[Table],
@@ -695,7 +707,8 @@ fn repaired(
         next += 1;
         Uuid(next.to_be_bytes())
     });
-    let mut restored = restore_into_empty(store(ids).map_err(unreadable)?, rows, tables, junctions).map_err(|e| unreadable(e.to_string()))?;
+    let mut restored =
+        restore_into_empty(notations.store(ids).map_err(unreadable)?, rows, tables, junctions).map_err(|e| unreadable(e.to_string()))?;
     repair(&mut restored);
     let rows = snapshot(&restored, tables, junctions).map_err(|e| unreadable(e.to_string()))?;
     Ok((restored, rows))
@@ -739,7 +752,7 @@ mod tests {
     /// A member read that fails is an error, never an empty list that would read as no members.
     #[test]
     fn a_failed_member_read_is_not_an_empty_list() {
-        let empty = store(Box::new(|| Uuid([1; 16]))).unwrap();
+        let empty = crate::NOTATIONS.store(Box::new(|| Uuid([1; 16]))).unwrap();
         assert!(matches!(lists_of(&empty, Obj(0)), Err(Invalid::NoSuchObject(_) | Invalid::Dead(_))));
     }
 }

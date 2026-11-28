@@ -34,7 +34,7 @@ thread_local! {
 /// Whether the session built from `rows` holds anything else, row order aside, answered later: the
 /// frame only freezes the session's objects, and their rows are built and compared on another
 /// thread. A comparison that cannot finish, or a thread that cannot start, counts as a difference.
-fn compare_off_frame(session: &Session, rows: Arc<Rows>) -> Receiver<bool> {
+fn compare_off_frame(notations: &'static archforge_notations::Notations, session: &Session, rows: Arc<Rows>) -> Receiver<bool> {
     #[cfg(test)]
     if let Some(answer) = COMPARED.with(|c| c.borrow_mut().take()) {
         return answer;
@@ -42,7 +42,7 @@ fn compare_off_frame(session: &Session, rows: Arc<Rows>) -> Receiver<bool> {
     let frozen = session.doc().freeze();
     let (tx, rx) = channel();
     let compare = move || {
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = notations.storage();
         let found = frozen
             .rows(&tables, &junctions)
             .ok()
@@ -323,7 +323,8 @@ impl Shell {
                 Ok(Ok(rows)) => match self.build(&rows) {
                     Ok(session) => {
                         let since = chat_panel::clock(self).now;
-                        r.repaired = r.viewing.is_none().then(|| Comparing { answer: compare_off_frame(&session, rows), since, got: None });
+                        r.repaired =
+                            r.viewing.is_none().then(|| Comparing { answer: compare_off_frame(self.notations, &session, rows), since, got: None });
                         Stage::Ready(Box::new(session), None)
                     }
                     Err(why) => {
@@ -445,7 +446,7 @@ impl Shell {
     /// holds diagrams of kinds Archforge does not support.
     pub(crate) fn build(&self, rows: &Rows) -> Result<Session, String> {
         let Some(source) = self.services.ids.clone() else { return Err(tr("The host gives no ids for the model's elements")) };
-        archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), self.open_repair()).map_err(crate::open_refusal)
+        self.notations.session_from_rows_repaired(rows, Box::new(move || source()), self.open_repair()).map_err(crate::open_refusal)
     }
 
     /// Ends the operation with the session as it was, saying `why` when given. The same session

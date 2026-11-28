@@ -99,7 +99,7 @@ fn settle(h: &mut H, what: &str) {
 
 /// The open model's rows, as saving writes them: every element and every diagram's layout.
 fn rows(h: &H) -> archforge_mof::rows::Rows {
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     archforge_mof::rows::snapshot(h.state().session.as_ref().expect("a model is open").doc(), &tables, &junctions).unwrap()
 }
 
@@ -151,7 +151,7 @@ fn start(journey: &str) -> (H, Sandbox) {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services, &crate::SCREENS),
+        Shell::new(services, &archforge_notations::NOTATIONS, &crate::SCREENS),
     );
     h.run();
     (h, sandbox)
@@ -384,7 +384,7 @@ fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
         let o = st.create(class).unwrap();
         st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
     };
-    let mut session = archforge_notations::session_from_rows_repaired(&rows(&h), Box::new(crate::services::fresh_id), too_large).unwrap();
+    let mut session = archforge_notations::NOTATIONS.session_from_rows_repaired(&rows(&h), Box::new(crate::services::fresh_id), too_large).unwrap();
     session.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
     h.state_mut().session = Some(session);
     h.step();
@@ -560,7 +560,7 @@ fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services, &crate::SCREENS),
+        Shell::new(services, &archforge_notations::NOTATIONS, &crate::SCREENS),
     );
     h.run();
     until(&mut h, "the look at start", |s| !s.agents.looking() && s.agents.look.claude != archforge_ui_egui::ai_agents::Program::NotLooked);

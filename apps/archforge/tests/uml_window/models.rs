@@ -502,18 +502,19 @@ fn a_project_from_before_the_root_package_opens_with_its_packages_in_the_root_as
             archforge_mof::Uuid::v7(at, r)
         })
     };
-    let (tables, junctions) = archforge_notations::storage();
-    let fresh = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_800_000)).unwrap();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
+    let fresh = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(1_761_670_800_000)).unwrap();
     let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
-    let older = archforge_notations::session_from_rows_repaired(&rows, ids(1_761_670_810_000), |st| {
-        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-        for name in ["Commerce", "Billing"] {
-            let p = st.create(archforge_uml::PACKAGE).unwrap();
-            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
-            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
-        }
-    })
-    .unwrap();
+    let older = archforge_notations::NOTATIONS
+        .session_from_rows_repaired(&rows, ids(1_761_670_810_000), |st| {
+            let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+            for name in ["Commerce", "Billing"] {
+                let p = st.create(archforge_uml::PACKAGE).unwrap();
+                st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
+                st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
+            }
+        })
+        .unwrap();
     let rows = archforge_mof::rows::snapshot(older.doc(), &tables, &junctions).unwrap();
     assert_eq!(archforge_uml::commands::packages(older.doc()).len(), 2, "the older shape");
     // Opened: the two go into the root, named after the project.

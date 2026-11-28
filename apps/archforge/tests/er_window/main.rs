@@ -89,7 +89,7 @@ fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
 
 /// The real shell in the harness at the design's frame size, given the app's screens parts.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
-    archforge_ui_egui::testing::harness(&SCREENS, theme)
+    archforge_ui_egui::testing::harness(&archforge_notations::NOTATIONS, &SCREENS, theme)
 }
 
 /// Where a test answers a save.
@@ -343,8 +343,8 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
     }
 
     /// Builds the rows on a thread of its own, as the app's writer does, then records them.
-    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
-        let (tables, junctions) = archforge_notations::storage();
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        let (tables, junctions) = notations.storage();
         let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
         self.write(project, rows);
     }
@@ -406,7 +406,7 @@ fn saving_harness(opened: Option<archforge_ui_egui::Opened>, picked: Option<&str
         pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
-    let mut shell = Shell::new(services, &SCREENS);
+    let mut shell = Shell::new(services, &archforge_notations::NOTATIONS, &SCREENS);
     if let Some(opened) = opened {
         shell.open_project(opened);
     }
@@ -457,7 +457,7 @@ fn described_project(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::A
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(archforge_ui_egui::Opened {
         name: "Commerce platform".into(),

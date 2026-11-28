@@ -415,8 +415,8 @@ fn shell() -> Shell {
         n += 1;
         archforge_mof::Uuid(n.to_le_bytes())
     });
-    let mut shell = Shell::new(archforge_ui_egui::Services::default(), &crate::SCREENS);
-    shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
+    let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &crate::SCREENS);
+    shell.session = Some(archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap());
     shell
 }
 
@@ -1097,7 +1097,11 @@ fn codex_account_is_read_on_first_use_never_at_launch() {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(archforge_ui_egui::Services { agents: Some(agents), ..archforge_ui_egui::Services::default() }, &crate::SCREENS),
+        Shell::new(
+            archforge_ui_egui::Services { agents: Some(agents), ..archforge_ui_egui::Services::default() },
+            &archforge_notations::NOTATIONS,
+            &crate::SCREENS,
+        ),
     );
     let frames_until = |h: &mut egui_kittest::Harness<'_, Shell>, what: &str, done: &dyn Fn(&Shell) -> bool| {
         let deadline = Instant::now() + WAIT;

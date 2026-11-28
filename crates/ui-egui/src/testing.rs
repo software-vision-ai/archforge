@@ -27,10 +27,11 @@ use crate::theme::ThemeKind;
 use crate::{BranchEntry, Services, Shell, widgets};
 
 /// The whole window in a harness at the design's frame size, in English and the appearance
-/// `theme`, its shell given the notations' screens `screens` and no host services, drawn once.
-pub fn harness(screens: &'static ScreensRegistry, theme: ThemeKind) -> Harness<'static, Shell> {
+/// `theme`, its shell given the notations `notations` and their screens `screens` and no host
+/// services, drawn once.
+pub fn harness(notations: &'static archforge_notations::Notations, screens: &'static ScreensRegistry, theme: ThemeKind) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ..Services::default() }, screens);
+    let mut shell = Shell::new(Services { ..Services::default() }, notations, screens);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -166,9 +167,10 @@ pub fn description_now(shell: &Shell, obj: Obj) -> String {
     crate::panels::description_now(shell, obj)
 }
 
-/// What the skill `s` aims at, as the Skills panel says it, by the notations `uis`.
-pub fn skill_target_word(uis: &[&'static dyn NotationUi], store: &Store, s: Obj) -> String {
-    crate::panels::target_word(uis, store, s)
+/// What the skill `s` aims at in a project seen through `view`, as the Skills panel says it, by the
+/// notations `uis`.
+pub fn skill_target_word(view: &archforge_diagram::ProjectView, uis: &[&'static dyn NotationUi], store: &Store, s: Obj) -> String {
+    crate::panels::target_word(view, uis, store, s)
 }
 
 /// The search's index of the diagrams and elements of `store`, by the kinds `kinds` and the
@@ -230,10 +232,10 @@ pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)> {
     all
 }
 
-/// Every key the labels for what the metamodel names look up for the notations `uis`, each with
-/// the index of the metamodel that names it.
-pub fn model_words(uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
-    crate::model_words::texts(uis)
+/// Every key the labels for what the metamodel names look up for the notations `uis` among the
+/// composition `notations`, each with the index of the metamodel that names it.
+pub fn model_words(notations: &archforge_notations::Notations, uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
+    crate::model_words::texts(notations, uis)
 }
 
 /// The keys of the in-window menu bar's access letters, with the diagram kinds `kinds`: each

@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_mof::{NameKind, Obj, Store, Uuid, Value, rows};
-use archforge_notations::{Session, name_kind, new_project_session, session_from_rows, storage, store, universe};
+use archforge_notations::{NOTATIONS, Session};
 use serde_json::{Value as Json, json};
 
 fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
@@ -23,13 +23,13 @@ fn run(s: &mut Session, cmd: &str, p: Json) -> String {
 }
 
 fn snapshot(st: &Store) -> rows::Rows {
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     rows::snapshot(st, &tables, &junctions).unwrap()
 }
 
 /// The project as it is, opened again from its rows: refused or not.
 fn reopens(st: &Store) -> Result<(), String> {
-    session_from_rows(&snapshot(st), ids(1 << 40)).map(|_| ()).map_err(String::from)
+    NOTATIONS.session_from_rows(&snapshot(st), ids(1 << 40)).map(|_| ()).map_err(String::from)
 }
 
 /// `cmd` is refused with `words` in the reason, leaving the model and its history as they were,
@@ -45,7 +45,7 @@ fn refused(s: &mut Session, cmd: &str, p: Json, words: &str) {
 
 /// A project with the package Sales.
 fn project() -> (Session, String) {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     (s, sales)
 }
@@ -281,19 +281,19 @@ fn set_of(s: &Session, g: &str) -> String {
 /// The project opens by the very rule UML's commands ask, and its kinds are UML's.
 #[test]
 fn the_project_opens_by_the_rule_the_commands_ask() {
-    let u = universe().unwrap();
+    let u = NOTATIONS.universe().unwrap();
     let uml_name = archforge_uml::named_element::NAME;
     let mut named = 0;
     for c in u.classes() {
         if u.info(c).and_then(|i| i.name_prop) == Some(uml_name) {
             named += 1;
-            assert_eq!(name_kind(c), archforge_uml::names::kind(c), "{}", u.class_name(c));
+            assert_eq!(NOTATIONS.name_kind(c), archforge_uml::names::kind(c), "{}", u.class_name(c));
         }
     }
     assert!(named > 100, "every named UML metaclass is asked: {named}");
     let classifier = Some(archforge_uml::names::CLASSIFIER);
     for c in archforge_uml::CLASSIFIERS {
-        assert_eq!(name_kind(c), classifier, "{}", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), classifier, "{}", u.class_name(c));
     }
     let own = [
         archforge_uml::PACKAGE,
@@ -304,14 +304,14 @@ fn the_project_opens_by_the_rule_the_commands_ask() {
         archforge_uml::GENERALIZATION_SET,
     ];
     for c in own {
-        assert_eq!(name_kind(c), Some(NameKind::Class(c)), "{}", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), Some(NameKind::Class(c)), "{}", u.class_name(c));
     }
     for c in [archforge_uml::ASSOCIATION, archforge_uml::DEPENDENCY, archforge_uml::INTERFACE_REALIZATION, archforge_uml::CONSTRAINT] {
-        assert_eq!(name_kind(c), None, "{}: a label", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), None, "{}: a label", u.class_name(c));
     }
-    assert_eq!(name_kind(archforge_diagram::DIAGRAM), None, "a diagram's name is a label");
-    assert_eq!(name_kind(archforge_core::SKILL), None, "skills keep their own rule");
-    assert!(name_kind(archforge_er::ENTITY).is_some(), "the ER names keep theirs");
+    assert_eq!(NOTATIONS.name_kind(archforge_diagram::DIAGRAM), None, "a diagram's name is a label");
+    assert_eq!(NOTATIONS.name_kind(archforge_core::SKILL), None, "skills keep their own rule");
+    assert!(NOTATIONS.name_kind(archforge_er::ENTITY).is_some(), "the ER names keep theirs");
 }
 
 /// `name` given to a new `class` element pushed into `owner`'s `prop`.
@@ -328,8 +328,8 @@ fn put(st: &mut Store, owner: Obj, prop: archforge_mof::PropId, class: archforge
 fn a_project_saved_with_names_the_old_check_refused_opens_and_one_kind_named_twice_does_not() {
     use archforge_uml::{CLASS, OPERATION, PACKAGE, PROPERTY, class, package};
     let (s, sales) = project();
-    let mut st = store(ids(1 << 41)).unwrap();
-    let (tables, junctions) = storage();
+    let mut st = NOTATIONS.store(ids(1 << 41)).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
     rows::restore(&mut st, &snapshot(s.doc()), &tables, &junctions).unwrap();
     let sales = st.by_uuid(Uuid::parse(&sales).unwrap()).unwrap();
     let order = put(&mut st, sales, package::PACKAGED_ELEMENT, CLASS, "Order");
@@ -350,12 +350,12 @@ fn a_project_saved_with_names_the_old_check_refused_opens_and_one_kind_named_twi
     assert!(st.first_problem().is_some(), "the check as it was refuses it");
     reopens(&st).unwrap();
     // Two operations of one name, or two classifiers, still do not open.
-    let mut twice = store(ids(1 << 42)).unwrap();
+    let mut twice = NOTATIONS.store(ids(1 << 42)).unwrap();
     rows::restore(&mut twice, &snapshot(&st), &tables, &junctions).unwrap();
     let order = twice.alive().find(|o| twice.class_of(*o).ok() == Some(CLASS)).unwrap();
     put(&mut twice, order, class::OWNED_OPERATION, OPERATION, "TOTAL");
     assert!(reopens(&twice).unwrap_err().contains("DuplicateName"));
-    let mut twice = store(ids(1 << 43)).unwrap();
+    let mut twice = NOTATIONS.store(ids(1 << 43)).unwrap();
     rows::restore(&mut twice, &snapshot(&st), &tables, &junctions).unwrap();
     let sales = twice.alive().find(|o| twice.class_of(*o).ok() == Some(PACKAGE) && archforge_core::name_of(&twice, *o) == "Sales").unwrap();
     put(&mut twice, sales, package::PACKAGED_ELEMENT, archforge_uml::ENUMERATION, "ORDER");
@@ -378,7 +378,7 @@ fn er_id(s: &Session, class: archforge_mof::ClassId, name: &str) -> String {
 /// pk_customer, the unique constraint uq_name, the checks named and positive_id and the indexes
 /// ix_a and ix_b; in Order the foreign keys fk_places and fk_billed.
 fn er_project() -> Session {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     run(&mut s, "er.schema.add", json!({ "name": "billing" }));
     let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Customer" }));
@@ -524,23 +524,23 @@ fn er_opens_by_the_rule_its_commands_ask() {
         ATTRIBUTE, CHECK_CONSTRAINT, DOMAIN, DOMAIN_CHECK, ENTITY, ENUM_TYPE, FOREIGN_KEY, INDEX, PRIMARY_KEY, RELATIONSHIP, SCHEMA, SEQUENCE,
         TABLE_INDEX, UNIQUE_CONSTRAINT, VIEW,
     };
-    let u = universe().unwrap();
+    let u = NOTATIONS.universe().unwrap();
     let mut named = 0;
     for c in u.classes().filter(|c| c.metamodel() == INDEX) {
         if u.info(c).and_then(|i| i.name_prop).is_some() {
             named += 1;
-            assert_eq!(name_kind(c), names::kind(c), "{}", u.class_name(c));
+            assert_eq!(NOTATIONS.name_kind(c), names::kind(c), "{}", u.class_name(c));
         }
     }
     assert_eq!(named, 16, "every named ER metaclass is asked, the abstract NamedElement and Key among them");
     for c in [ENTITY, DOMAIN, ENUM_TYPE, SEQUENCE, VIEW] {
-        assert_eq!(name_kind(c), Some(RELATION), "{}", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), Some(RELATION), "{}", u.class_name(c));
     }
     for c in [PRIMARY_KEY, UNIQUE_CONSTRAINT, FOREIGN_KEY, CHECK_CONSTRAINT, TABLE_INDEX] {
-        assert_eq!(name_kind(c), Some(CONSTRAINT), "{}", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), Some(CONSTRAINT), "{}", u.class_name(c));
     }
     for c in [SCHEMA, ATTRIBUTE, RELATIONSHIP, DOMAIN_CHECK] {
-        assert_eq!(name_kind(c), Some(NameKind::Class(c)), "{}", u.class_name(c));
+        assert_eq!(NOTATIONS.name_kind(c), Some(NameKind::Class(c)), "{}", u.class_name(c));
     }
     let s = er_project();
     let st = s.doc();
@@ -561,7 +561,7 @@ fn er_opens_by_the_rule_its_commands_ask() {
         (named_obj(TABLE_INDEX, "ix_a"), named_obj(TABLE_INDEX, "ix_b"), true),
         (named_obj(DOMAIN_CHECK, "positive"), named_obj(DOMAIN_CHECK, "small"), false),
     ];
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     for (first, second, constraint) in same_kind {
         let taken = archforge_core::name_of(st, first).to_uppercase();
         let (owner, _) = st.container(second).unwrap().unwrap();
@@ -573,7 +573,7 @@ fn er_opens_by_the_rule_its_commands_ask() {
             assert!(!archforge_er::rules::constraint_name_free(st, shop, &taken, Some(second)), "{what} {taken}: the schema's constraints refuse it");
         }
         // What the check as it opens makes of it, written straight into the store.
-        let mut copy = store(ids(1 << 41)).unwrap();
+        let mut copy = NOTATIONS.store(ids(1 << 41)).unwrap();
         rows::restore(&mut copy, &snapshot(st), &tables, &junctions).unwrap();
         let prop = copy.universe().info(class).and_then(|i| i.name_prop).unwrap();
         let second = copy.by_uuid(st.uuid(second).unwrap()).unwrap();

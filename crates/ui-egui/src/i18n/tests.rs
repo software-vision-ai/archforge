@@ -67,8 +67,9 @@ fn metamodel_names_become_words() {
 #[test]
 fn the_labels_cover_what_a_card_shows_and_nothing_else() {
     use archforge_mof::TypeRef;
-    let universe = archforge_notations::universe().unwrap();
-    let texts: Vec<String> = crate::model_words::texts(crate::tests::SCREENS.notation_uis()).into_iter().map(|(_, word)| word).collect();
+    let universe = crate::tests::NOTATIONS.universe().unwrap();
+    let texts: Vec<String> =
+        crate::model_words::texts(crate::tests::NOTATIONS, crate::tests::SCREENS.notation_uis()).into_iter().map(|(_, word)| word).collect();
     for wanted in ["Is abstract", "On delete", "Package", "Exactly one", "Interface realization", "Enum type"] {
         assert!(texts.iter().any(|t| t == wanted), "{wanted} is missing");
     }
@@ -100,7 +101,7 @@ fn the_labels_cover_what_a_card_shows_and_nothing_else() {
 /// of the model area.
 #[test]
 fn every_class_the_notations_create_has_a_kind_word() {
-    let universe = archforge_notations::universe().unwrap();
+    let universe = crate::tests::NOTATIONS.universe().unwrap();
     let word = |constant: &str| {
         let mut parts = constant.split('_').map(|p| p.to_lowercase());
         let first = parts.next().unwrap_or_default();
@@ -151,9 +152,10 @@ fn every_reason_a_command_is_not_available_has_its_row() {
         })
     };
     let options = archforge_engine::Options::default();
-    let rootless = archforge_notations::store(ids()).unwrap();
-    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
-    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
+    let rootless = crate::tests::NOTATIONS.store(ids()).unwrap();
+    let rootless =
+        archforge_engine::Session::with_view(crate::tests::NOTATIONS.registry().unwrap(), rootless, 1, options, crate::tests::NOTATIONS.view());
+    let new = crate::tests::NOTATIONS.new_project_session("Shop", ids()).unwrap();
     set_language("en");
     let mut reasons = std::collections::BTreeSet::new();
     for session in [&rootless, &new] {
@@ -178,7 +180,7 @@ const EDGES: [u64; 8] = [0, 1, 2, 5, 11, 21, 100, 1000];
 #[test]
 fn every_languages_plural_rows_give_their_form_at_the_edge_numbers() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    let _shell = crate::Shell::new(crate::Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
     // Spelled out for one row in every language.
     let days = |code: &str, n: u64| {
         set_language(code);
@@ -676,7 +678,7 @@ fn every_catalogue_in_the_folder_is_registered() {
 /// notation it is given as it is made, and that the interfaces' lookups register their own.
 #[test]
 fn every_row_finds_its_text_in_every_language() {
-    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    let _shell = crate::Shell::new(crate::Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
     for table in every_table() {
         let english = rows(table.first().expect("a table has its English catalogue").text);
         for (lang, catalogue) in LANGUAGES.iter().zip(table) {

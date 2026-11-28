@@ -182,7 +182,7 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         });
-        archforge_notations::new_project_session("Shop", ids).unwrap()
+        crate::tests::NOTATIONS.new_project_session("Shop", ids).unwrap()
     }
 
     /// Every word must be found, and the name itself, then its start, then a word's start inside

@@ -330,7 +330,7 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
 #[test]
 fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     use archforge_ui_egui::i18n::{set_language, tr_ctx};
     let uis = SCREENS.notation_uis();
     let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
@@ -474,7 +474,7 @@ fn only_a_notation_s_typed_menu_takes_the_keys() {
 #[test]
 fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
         assert!(
             !archforge_ui_egui::snapshot::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
@@ -532,7 +532,7 @@ fn each_notation_answers_the_page_of_its_elements() {
         n += 1;
         archforge_mof::Uuid(n.to_le_bytes())
     });
-    let mut s = archforge_notations::new_project_session("P", ids).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("P", ids).unwrap();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
     let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
@@ -552,7 +552,7 @@ fn each_notation_answers_the_page_of_its_elements() {
 /// was given parts: ER's notation and kind, then UML's, each the part's own.
 #[test]
 fn the_apps_screens_parts_give_a_shell_er_then_uml() {
-    let shell = Shell::new(Services::default(), &SCREENS);
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     let metamodels = |uis: &[&dyn archforge_shell_api::notation_ui::NotationUi]| uis.iter().map(|ui| ui.metamodel()).collect::<Vec<_>>();
     assert_eq!(
         metamodels(archforge_ui_egui::testing::notation_uis(&shell)),
@@ -638,10 +638,10 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     h.run();
     // Saved, closed and opened again in a new window with the same preferences: the same tabs,
     // the same diagram shown, panned and zoomed as it was, and nothing changed or undoable.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
     let reopen = |state: archforge_ui_egui::state::UiState| {
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
         shell.state = state;
         shell.open_project(archforge_ui_egui::Opened {
             name: "Commerce platform".into(),
@@ -846,9 +846,9 @@ fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes(
             archforge_mof::Uuid::v7(at, r)
         })
     };
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let snap = |s: &archforge_notations::Session| archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let mut made = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
+    let mut made = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     let schema = id(made.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
     let account = id(made.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
@@ -860,20 +860,21 @@ fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes(
     made.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap();
     // The packages as older projects saved them: at the top level, with no root package.
-    let older = archforge_notations::session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
-        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-        for name in ["Commerce", "Billing"] {
-            let p = st.create(archforge_uml::PACKAGE).unwrap();
-            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
-            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
-        }
-    })
-    .unwrap();
+    let older = archforge_notations::NOTATIONS
+        .session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
+            let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+            for name in ["Commerce", "Billing"] {
+                let p = st.create(archforge_uml::PACKAGE).unwrap();
+                st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
+                st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
+            }
+        })
+        .unwrap();
     let rows = snap(&older);
     // What the shell made of it before: the boxes fitted as the rows were read, then the root.
     // The shell's ids are the harness's, from the first.
     let shells = test_ids();
-    let mut before = archforge_notations::session_from_rows_repaired(&rows, Box::new(move || shells()), er_place::fit_tables).unwrap();
+    let mut before = archforge_notations::NOTATIONS.session_from_rows_repaired(&rows, Box::new(move || shells()), er_place::fit_tables).unwrap();
     before.execute("uml.model.root", &serde_json::json!({})).unwrap();
     let opened = archforge_ui_egui::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
     let (h, _host) = saving_harness(Some(opened), None);

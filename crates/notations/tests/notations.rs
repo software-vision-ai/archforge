@@ -9,10 +9,7 @@ use archforge_engine::{CommandError, Options};
 use archforge_mof::rows::{self, Cell};
 use archforge_mof::schema::{Column, Table};
 use archforge_mof::{ClassId, Obj, Store, Uuid, Value};
-use archforge_notations::{
-    OpenError, PARTS, Session, UnknownDiagram, check_kinds, check_kinds_in_rows, new_project_session, registry, session_from_rows,
-    session_from_rows_repaired, storage, store, universe,
-};
+use archforge_notations::{NOTATIONS, OpenError, Session, UnknownDiagram};
 use serde_json::{Value as Json, json};
 
 fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
@@ -27,27 +24,27 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
 
 #[test]
 fn every_notation_joins_the_universe_and_the_tables_once() {
-    let u = universe().unwrap();
-    for n in PARTS {
+    let u = NOTATIONS.universe().unwrap();
+    for n in NOTATIONS.parts() {
         let m = (n.metamodel)().unwrap();
         assert!(u.metamodels().any(|held| held.uri == m.uri), "{} is in the universe", n.name);
     }
-    let (tables, junctions) = storage();
-    assert_eq!(tables.len(), PARTS.iter().map(|n| n.tables.len()).sum::<usize>());
-    assert_eq!(junctions.len(), PARTS.iter().map(|n| n.junctions.len()).sum::<usize>());
+    let (tables, junctions) = NOTATIONS.storage();
+    assert_eq!(tables.len(), NOTATIONS.parts().map(|n| n.tables.len()).sum::<usize>());
+    assert_eq!(junctions.len(), NOTATIONS.parts().map(|n| n.junctions.len()).sum::<usize>());
     let mut names = std::collections::BTreeSet::new();
     assert!(tables.iter().map(|t| t.name).chain(junctions.iter().map(|j| j.name)).all(|n| names.insert(n)), "every table once");
 }
 
 #[test]
 fn a_model_of_er_and_uml_comes_back_from_its_rows() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
     assert!(shop.value["id"].is_string());
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let mut written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     // A UML class in a package, a member of the same Model, beside the ER schema.
-    let mut st = store(ids(1 << 40)).unwrap();
+    let mut st = NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut st, &written, &tables, &junctions).unwrap();
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
     let pkg = st.create(archforge_uml::PACKAGE).unwrap();
@@ -57,7 +54,7 @@ fn a_model_of_er_and_uml_comes_back_from_its_rows() {
     archforge_uml::ClassObj::set_name(&mut st, class, Some("Customer")).unwrap();
     st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(class)).unwrap();
     written = rows::snapshot(&st, &tables, &junctions).unwrap();
-    let back = session_from_rows(&written, ids(1 << 41)).unwrap();
+    let back = NOTATIONS.session_from_rows(&written, ids(1 << 41)).unwrap();
     assert_eq!(rows::snapshot(back.doc(), &tables, &junctions).unwrap(), written);
     assert_eq!(
         archforge_core::name_of(back.doc(), back.doc().alive().find(|o| back.doc().class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap()),
@@ -74,7 +71,7 @@ fn a_model_of_er_and_uml_comes_back_from_its_rows() {
 /// `a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again`.
 #[test]
 fn a_mixed_structure_diagram_saved_as_rows_opens_again_as_the_same_store() {
-    let mut s = new_project_session("Commerce", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let order = id(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
@@ -85,9 +82,9 @@ fn a_mixed_structure_diagram_saved_as_rows_opens_again_as_the_same_store() {
         shown.iter().zip(0..).map(|(e, i)| id(&mut s, "diagram.place", json!({ "diagram": d, "element": e, "x": 300 * i, "y": 0 }))).collect();
     let dep = id(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": orders }));
     let connector = id(&mut s, "diagram.connect", json!({ "diagram": d, "element": dep, "source": boxes[1], "target": boxes[0] }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let back = session_from_rows(&saved, ids(1 << 40)).unwrap();
+    let back = NOTATIONS.session_from_rows(&saved, ids(1 << 40)).unwrap();
     assert_eq!(rows::snapshot(back.doc(), &tables, &junctions).unwrap(), saved, "the same store, row for row");
     let st = back.doc();
     let at = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
@@ -172,7 +169,7 @@ fn uuid(st: &Store, o: Obj) -> String {
 
 #[test]
 fn a_second_notations_diagrams_removals_and_descriptions_route_to_it() {
-    let mut st = store(ids(0)).unwrap();
+    let mut st = NOTATIONS.store(ids(0)).unwrap();
     let model = st.create(archforge_core::MODEL).unwrap();
     let pkg = st.create(archforge_uml::PACKAGE).unwrap();
     archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
@@ -187,7 +184,7 @@ fn a_second_notations_diagrams_removals_and_descriptions_route_to_it() {
     st.set(g, archforge_uml::generalization::GENERAL, Value::Ref(party)).unwrap();
     st.push(customer, archforge_uml::classifier::GENERALIZATION, Value::Ref(g)).unwrap();
     let (pkg, party, customer, g) = (uuid(&st, pkg), uuid(&st, party), uuid(&st, customer), uuid(&st, g));
-    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(BOTH));
+    let mut s = Session::with_view(NOTATIONS.registry().unwrap(), st, 1, Options::default(), ProjectView::new(BOTH));
 
     // The sketch's diagrams: of a package, showing classes and the generalization between them.
     let d = id(&mut s, "diagram.add", json!({ "kind": KIND, "element": pkg, "name": "Parties" }));
@@ -223,7 +220,7 @@ fn a_second_notations_diagrams_removals_and_descriptions_route_to_it() {
 
     // Every command, every key, wrong values: nothing panics and the model stays whole.
     let ids = [pkg.as_str(), party.as_str(), customer.as_str(), g.as_str(), d.as_str(), er.as_str(), schema.as_str(), table.as_str(), "not-an-id"];
-    let calls = sweep_with(&mut s, &ids, |st| rows::snapshot(st, &storage().0, &storage().1).unwrap()).unwrap();
+    let calls = sweep_with(&mut s, &ids, |st| rows::snapshot(st, &NOTATIONS.storage().0, &NOTATIONS.storage().1).unwrap()).unwrap();
     assert!(calls > 100, "{calls}");
 }
 
@@ -247,7 +244,7 @@ static STUBBORN: &[&dyn Notation] = &[&archforge_er::ErNotation, &Stubborn];
 fn descriptions_read_back_through_each_notation_under_one_limit() {
     let limit = archforge_uml::descriptions::MAX_DESCRIPTION;
     assert_eq!(limit, archforge_er::rules::MAX_TEXT, "one limit across the notations");
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let table = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
     let pkg = id(&mut s, "uml.package.add", json!({ "name": "sales" }));
@@ -269,17 +266,17 @@ fn descriptions_read_back_through_each_notation_under_one_limit() {
 
 #[test]
 fn a_removal_one_notation_refuses_changes_nothing_in_any() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let table = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
-    let (tables, junctions) = storage();
-    let mut st = store(ids(1 << 40)).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
+    let mut st = NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
     let pkg = st.create(archforge_uml::PACKAGE).unwrap();
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
     archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
     let pkg = uuid(&st, pkg);
-    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
+    let mut s = Session::with_view(NOTATIONS.registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
     let before = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     // ER removes its table first, then the second notation refuses: the table comes back.
     // The refusal carries its reason typed beside the unchanged English (AR-439).
@@ -296,7 +293,7 @@ fn a_removal_one_notation_refuses_changes_nothing_in_any() {
 /// class its association; the relationships between what stays stay and are not counted.
 #[test]
 fn a_removal_across_notations_adds_up_what_each_took() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let [customer, order, item] = ["customer", "order", "item"].map(|name| id(&mut s, "er.entity.add", json!({ "schema": schema, "name": name })));
     for (from, to) in [(&customer, &order), (&order, &item)] {
@@ -322,12 +319,12 @@ fn a_removal_across_notations_adds_up_what_each_took() {
 fn every_shared_command_refusal_carries_its_reason_typed() {
     use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
     use archforge_engine::{EngineError, Reason};
-    let mut st = store(ids(0)).unwrap();
+    let mut st = NOTATIONS.store(ids(0)).unwrap();
     let model = st.create(archforge_core::MODEL).unwrap();
     let pkg = st.create(archforge_uml::PACKAGE).unwrap();
     archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
     let pkg = uuid(&st, pkg);
-    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
+    let mut s = Session::with_view(NOTATIONS.registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let table = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
     let gone = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "gone" }));
@@ -363,13 +360,13 @@ fn every_shared_command_refusal_carries_its_reason_typed() {
 
 #[test]
 fn every_session_a_project_makes_holds_its_notations() {
-    let s = new_project_session("Shop", ids(0)).unwrap();
-    assert!(std::ptr::eq(s.view().notations(), archforge_notations::NOTATIONS));
-    let (tables, junctions) = storage();
-    let back = session_from_rows(&rows::snapshot(s.doc(), &tables, &junctions).unwrap(), ids(1 << 40)).unwrap();
-    assert!(std::ptr::eq(back.view().notations(), archforge_notations::NOTATIONS));
+    let s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
+    assert!(std::ptr::eq(s.view().notations(), NOTATIONS.notations()));
+    let (tables, junctions) = NOTATIONS.storage();
+    let back = NOTATIONS.session_from_rows(&rows::snapshot(s.doc(), &tables, &junctions).unwrap(), ids(1 << 40)).unwrap();
+    assert!(std::ptr::eq(back.view().notations(), NOTATIONS.notations()));
     // A view without notations knows no diagram kind, and says so, the reason typed (AR-512).
-    let mut bare = Session::new(registry().unwrap(), store(ids(1 << 41)).unwrap(), 1, Options::default());
+    let mut bare = Session::new(NOTATIONS.registry().unwrap(), NOTATIONS.store(ids(1 << 41)).unwrap(), 1, Options::default());
     let Err(archforge_engine::EngineError::Failed { error, .. }) = bare.execute("diagram.add", &json!({ "kind": archforge_er::DIAGRAM_KIND })) else {
         panic!("a view without notations adds no diagram")
     };
@@ -383,7 +380,7 @@ fn every_session_a_project_makes_holds_its_notations() {
 fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
     // 400 packages of 1,000 classes each: over a million steps to rebuild, more than one store
     // transaction takes, built straight in the store as a big project's rows would hold them.
-    let mut st = store(ids(0)).unwrap();
+    let mut st = NOTATIONS.store(ids(0)).unwrap();
     let model = st.create(archforge_core::MODEL).unwrap();
     for p in 0..400 {
         let pkg = st.create(archforge_uml::PACKAGE).unwrap();
@@ -395,16 +392,16 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
             st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(class)).unwrap();
         }
     }
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let saved = rows::snapshot(&st, &tables, &junctions).unwrap();
     // One transaction refuses it; opening builds it without one.
-    let mut again = store(ids(1)).unwrap();
+    let mut again = NOTATIONS.store(ids(1)).unwrap();
     assert!(matches!(rows::restore(&mut again, &saved, &tables, &junctions), Err(archforge_mof::Invalid::TooManyOps)));
-    let session = session_from_rows(&saved, ids(2)).unwrap();
+    let session = NOTATIONS.session_from_rows(&saved, ids(2)).unwrap();
     assert_eq!(session.doc().live(), 1 + 400 + 400_000);
     assert!(!session.is_dirty());
     // A store that already holds something is refused rather than mixed.
-    let mut busy = store(ids(3)).unwrap();
+    let mut busy = NOTATIONS.store(ids(3)).unwrap();
     busy.create(archforge_core::MODEL).unwrap();
     assert!(rows::restore_into_empty(busy, &saved, &tables, &junctions).is_err());
 }
@@ -413,14 +410,14 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
 fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_holds_two() {
     // Every skill sits in the model's one list, so the siblings' name check refused a
     // class's skill that overrides the project's of the same name, and the project would not open.
-    let mut s = new_project_session("Review", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Review", ids(0)).unwrap();
     let project = id(&mut s, "skill.add", json!({ "name": "Review export conventions", "body": "Everywhere." }));
     let package = id(&mut s, "uml.package.add", json!({ "name": "Review domain" }));
     let invoice = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Invoice" }));
     let own = id(&mut s, "skill.add", json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let back = session_from_rows(&written, ids(1 << 40)).expect("the override opens again");
+    let back = NOTATIONS.session_from_rows(&written, ids(1 << 40)).expect("the override opens again");
     assert_eq!(rows::snapshot(back.doc(), &tables, &junctions).unwrap(), written);
     let st = back.doc();
     let obj = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
@@ -428,21 +425,21 @@ fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_hold
     let found: Vec<(Obj, Option<Obj>, Option<Obj>)> = effective.iter().map(|e| (e.skill, e.origin, e.overridden_by)).collect();
     assert_eq!(found, [(obj(&project), None, Some(obj(&own))), (obj(&own), Some(obj(&invoice)), None)], "the class's own overrides the project's");
     // Two of one name on one subject still do not open, whichever way the rows came to hold them.
-    let mut st = store(ids(1 << 41)).unwrap();
+    let mut st = NOTATIONS.store(ids(1 << 41)).unwrap();
     rows::restore(&mut st, &written, &tables, &junctions).unwrap();
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
     let twin = st.create(archforge_core::SKILL).unwrap();
     st.set(twin, archforge_core::named_element::NAME, Value::str("review EXPORT conventions")).unwrap();
     st.set(twin, archforge_core::skill::SUBJECT, Value::Ref(st.by_uuid(Uuid::parse(&invoice).unwrap()).unwrap())).unwrap();
     st.push(model, archforge_core::model::SKILL, Value::Ref(twin)).unwrap();
-    let e = session_from_rows(&rows::snapshot(&st, &tables, &junctions).unwrap(), ids(1 << 42)).err().expect("refused");
+    let e = NOTATIONS.session_from_rows(&rows::snapshot(&st, &tables, &junctions).unwrap(), ids(1 << 42)).err().expect("refused");
     assert!(e.to_string().contains("DuplicateName"), "{e}");
 }
 
 /// A skill aims only at the kinds of its subject's notation and moves only within that notation.
 #[test]
 fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let package = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let class = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Order" }));
@@ -479,7 +476,7 @@ fn skill_count(s: &Session) -> usize {
 
 #[test]
 fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let diagram = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }));
@@ -506,7 +503,7 @@ fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
 /// ER diagram binds nothing, a package's first class diagram is bound (AR-579).
 #[test]
 fn a_schemas_first_er_diagram_binds_nothing_and_a_packages_first_class_diagram_is_bound() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "shop" }));
     assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [], "the schema's diagram is no default");
@@ -521,7 +518,7 @@ fn a_schemas_first_er_diagram_binds_nothing_and_a_packages_first_class_diagram_i
 
 #[test]
 fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_with_undo() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     // Sales's first diagram is its default, which is not removed alone (AR-578): the second goes.
@@ -552,7 +549,7 @@ fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_wit
 
 #[test]
 fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_from_the_parent() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let diagram = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }));
@@ -567,22 +564,22 @@ fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_
 
 #[test]
 fn a_diagram_crafted_to_show_itself_inherits_from_what_holds_it() {
-    let mut st = store(ids(0)).unwrap();
+    let mut st = NOTATIONS.store(ids(0)).unwrap();
     let model = st.create(archforge_core::MODEL).unwrap();
     let d = st.create(archforge_diagram::DIAGRAM).unwrap();
     st.push(model, archforge_core::model::MEMBER, Value::Ref(d)).unwrap();
     st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(d)).unwrap();
     let project = st.create(archforge_core::SKILL).unwrap();
     st.push(model, archforge_core::model::SKILL, Value::Ref(project)).unwrap();
-    let levels = archforge_core::skills::levels(&archforge_notations::view(), &st, d);
+    let levels = archforge_core::skills::levels(&archforge_notations::NOTATIONS.view(), &st, d);
     assert_eq!(levels, [model, d], "the model above it, not the diagram again");
-    let applying = archforge_core::skills::effective_skills(&archforge_notations::view(), &st, d, None);
+    let applying = archforge_core::skills::effective_skills(&archforge_notations::NOTATIONS.view(), &st, d, None);
     assert_eq!(applying.iter().map(|e| e.skill).collect::<Vec<_>>(), [project]);
 }
 
 /// A fresh project with an ER diagram, "Orders", and a UML one; the ER diagram's id.
 fn two_diagrams() -> (Session, String) {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let shop = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let orders = id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Orders" }));
     let sales = id(&mut s, "uml.package.add", json!({ "name": "sales" }));
@@ -592,7 +589,7 @@ fn two_diagrams() -> (Session, String) {
 
 /// The kind cell of `diagram`'s row in a project's rows.
 fn kind_cell<'a>(rows: &'a mut rows::Rows, diagram: &str) -> &'a mut Cell {
-    let (tables, _) = storage();
+    let (tables, _) = NOTATIONS.storage();
     let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
     let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
     let row = rows.tables[at].iter_mut().find(|r| r[0] == Cell::Id(Uuid::parse(diagram).unwrap())).unwrap();
@@ -604,36 +601,37 @@ fn kind_cell<'a>(rows: &'a mut rows::Rows, diagram: &str) -> &'a mut Cell {
 #[test]
 fn a_diagram_of_a_kind_no_notation_knows_refuses_its_model_before_anything_is_built() {
     let (s, orders) = two_diagrams();
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let fresh = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     // A fresh project's rows pass the check and open.
-    assert_eq!(check_kinds_in_rows(&fresh, &tables), Ok(()));
-    assert_eq!(check_kinds(s.doc()), Ok(()));
-    assert!(session_from_rows(&fresh, ids(1 << 40)).is_ok());
+    assert_eq!(NOTATIONS.check_kinds_in_rows(&fresh, &tables), Ok(()));
+    assert_eq!(NOTATIONS.check_kinds(s.doc()), Ok(()));
+    assert!(NOTATIONS.session_from_rows(&fresh, ids(1 << 40)).is_ok());
     // The ER diagram's kind as an earlier version could have stored it.
     let mut legacy = fresh.clone();
     *kind_cell(&mut legacy, &orders) = Cell::Text("legacy.kind".into());
-    let refused = check_kinds_in_rows(&legacy, &tables).unwrap_err();
+    let refused = NOTATIONS.check_kinds_in_rows(&legacy, &tables).unwrap_err();
     let named = |d: &UnknownDiagram| (d.id.to_string(), d.name.clone(), d.kind.clone());
     assert_eq!(refused.diagrams.iter().map(named).collect::<Vec<_>>(), [(orders.clone(), "Orders".to_string(), "legacy.kind".to_string())]);
     assert_eq!(refused.accepted, [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
     // Refused whole: the repair never sees a store, so none is built, let alone handed back.
     let mut built = false;
-    let why = session_from_rows_repaired(&legacy, ids(1 << 40), |_| built = true).err().unwrap();
+    let why = NOTATIONS.session_from_rows_repaired(&legacy, ids(1 << 40), |_| built = true).err().unwrap();
     assert!(!built, "nothing is built from refused rows");
     assert_eq!(why, OpenError::UnknownKinds(refused), "callers match the refusal");
     let why = why.to_string();
     assert!(why.contains("\"Orders\"") && why.contains("\"legacy.kind\"") && why.contains("the kinds known are er, uml.structure"), "{why}");
     // A diagram of no kind is of none a notation knows.
     *kind_cell(&mut legacy, &orders) = Cell::Null;
-    assert_eq!(check_kinds_in_rows(&legacy, &tables).unwrap_err().diagrams[0].kind, "");
+    assert_eq!(NOTATIONS.check_kinds_in_rows(&legacy, &tables).unwrap_err().diagrams[0].kind, "");
     // A repair that would change a kind is refused too, and no session comes back.
-    let why = session_from_rows_repaired(&fresh, ids(1 << 40), |st| {
-        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
-        st.set(d, archforge_diagram::diagram::KIND, Value::str("legacy.kind")).unwrap();
-    })
-    .err()
-    .unwrap();
+    let why = NOTATIONS
+        .session_from_rows_repaired(&fresh, ids(1 << 40), |st| {
+            let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+            st.set(d, archforge_diagram::diagram::KIND, Value::str("legacy.kind")).unwrap();
+        })
+        .err()
+        .unwrap();
     assert!(matches!(&why, OpenError::UnknownKinds(e) if e.diagrams[0].kind == "legacy.kind"), "{why}");
 }
 
@@ -644,7 +642,7 @@ fn a_diagram_of_a_kind_no_notation_knows_refuses_its_model_before_anything_is_bu
 fn the_gates_table_of_kinds_lists_every_registered_kind() {
     let table = include_str!("../../../xtask/diagram-kinds.tsv");
     let mut listed: Vec<&str> = table.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).filter_map(|l| l.split('\t').next()).collect();
-    let mut registered = archforge_notations::kinds();
+    let mut registered = archforge_notations::NOTATIONS.kinds();
     listed.sort_unstable();
     registered.sort_unstable();
     assert_eq!(registered, listed, "every registered kind needs its row in xtask/diagram-kinds.tsv, and every row a registered kind");
@@ -655,11 +653,14 @@ fn the_gates_table_of_kinds_lists_every_registered_kind() {
 /// refused, typed and naming the kinds known, with no undo entry, and rows holding one are refused.
 #[test]
 fn the_kinds_known_are_er_and_uml_structure_and_the_earlier_uml_class_is_refused() {
-    assert_eq!(archforge_diagram::DiagramView::kinds(&archforge_notations::view()), [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    assert_eq!(
+        archforge_diagram::DiagramView::kinds(&archforge_notations::NOTATIONS.view()),
+        [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]
+    );
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let main = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Main" }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let state = |s: &Session| (rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(String::from), s.revision(), s.counter());
     let before = state(&s);
     let Err(archforge_engine::EngineError::Failed { error, .. }) =
@@ -675,14 +676,14 @@ fn the_kinds_known_are_er_and_uml_structure_and_the_earlier_uml_class_is_refused
     // The diagram is stored as `uml.structure`, and its rows open again.
     let mut fresh = before.0;
     assert_eq!(*kind_cell(&mut fresh, &main), Cell::Text(archforge_uml::STRUCTURE_DIAGRAM.into()));
-    assert!(session_from_rows(&fresh, ids(1 << 40)).is_ok());
+    assert!(NOTATIONS.session_from_rows(&fresh, ids(1 << 40)).is_ok());
     // Rows holding a diagram of the earlier kind are refused whole, never read as a structure diagram.
     *kind_cell(&mut fresh, &main) = Cell::Text("uml.class".into());
-    let refused = check_kinds_in_rows(&fresh, &tables).unwrap_err();
+    let refused = NOTATIONS.check_kinds_in_rows(&fresh, &tables).unwrap_err();
     let named = |d: &UnknownDiagram| (d.id.to_string(), d.name.clone(), d.kind.clone());
     assert_eq!(refused.diagrams.iter().map(named).collect::<Vec<_>>(), [(main, "Main".to_string(), "uml.class".to_string())]);
     assert_eq!(refused.accepted, [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
-    let why = session_from_rows_repaired(&fresh, ids(1 << 40), |_| ()).err().unwrap();
+    let why = NOTATIONS.session_from_rows_repaired(&fresh, ids(1 << 40), |_| ()).err().unwrap();
     assert_eq!(why, OpenError::UnknownKinds(refused));
 }
 
@@ -712,7 +713,7 @@ fn the_kind_check_reads_a_diagram_table_of_any_shape_by_its_column_names() {
         row(Cell::Null, kindless),
     ];
     let rows = rows::Rows { tables: vec![diagrams], junctions: Vec::new() };
-    let refused = check_kinds_in_rows(&rows, &earlier).unwrap_err();
+    let refused = NOTATIONS.check_kinds_in_rows(&rows, &earlier).unwrap_err();
     let unknown = |id, kind: &str| UnknownDiagram { id, name: String::new(), kind: kind.into() };
     assert_eq!(refused.diagrams, [unknown(legacy, "legacy.kind"), unknown(kindless, "")], "every one, in the order read");
     let said = format!(
@@ -720,10 +721,10 @@ fn the_kind_check_reads_a_diagram_table_of_any_shape_by_its_column_names() {
     );
     assert_eq!(refused.to_string(), said);
     // A shape without the diagram table holds no diagram.
-    assert_eq!(check_kinds_in_rows(&rows, &[]), Ok(()));
+    assert_eq!(NOTATIONS.check_kinds_in_rows(&rows, &[]), Ok(()));
     // One whose diagram table has no kind column holds diagrams of no kind.
     let rows = rows::Rows { tables: vec![vec![vec![Cell::Id(known)]]], junctions: Vec::new() };
-    let refused = check_kinds_in_rows(&rows, &diagrams_of(KINDLESS)).unwrap_err();
+    let refused = NOTATIONS.check_kinds_in_rows(&rows, &diagrams_of(KINDLESS)).unwrap_err();
     assert_eq!((refused.diagrams.len(), refused.diagrams[0].kind.as_str()), (1, ""));
 }
 
@@ -732,7 +733,7 @@ fn the_kind_check_reads_a_diagram_table_of_any_shape_by_its_column_names() {
 /// but none.
 fn unsound_bindings() -> rows::Rows {
     use archforge_diagram::default_diagram_binding::DEFAULT_DIAGRAM;
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let shop = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let er = id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "shop" }));
     let mut diagrams = Vec::new();
@@ -740,8 +741,8 @@ fn unsound_bindings() -> rows::Rows {
         let p = id(&mut s, "uml.package.add", json!({ "name": name }));
         diagrams.push(id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": p, "name": name })));
     }
-    let (tables, junctions) = storage();
-    let mut st = store(ids(1 << 40)).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
+    let mut st = NOTATIONS.store(ids(1 << 40)).unwrap();
     rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
     let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
     let binding_to = |st: &Store, d: &str| archforge_diagram::defaults::bindings_to(st, obj(st, d))[0];
@@ -773,8 +774,8 @@ fn diagnosed(st: &Store, all: &[OpenProblem]) -> Vec<(&'static str, String, &'st
 #[test]
 fn unsound_bindings_open_unchanged_and_are_reported() {
     let written = unsound_bindings();
-    let (tables, junctions) = storage();
-    let opened = archforge_notations::session_from_rows_diagnosed(&written, ids(1 << 41), |_| {}).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
+    let opened = archforge_notations::NOTATIONS.session_from_rows_diagnosed(&written, ids(1 << 41), |_| {}).unwrap();
     let st = opened.session.doc();
     assert_eq!(rows::snapshot(st, &tables, &junctions).unwrap(), written, "the rows are as they were read");
     assert!(!opened.session.is_dirty(), "nothing to save");
@@ -786,7 +787,7 @@ fn unsound_bindings_open_unchanged_and_are_reported() {
         ("Orders", "default_diagram_missing"),
     ]);
     assert_eq!(diagnosed(st, &opened.problems), expected);
-    assert_eq!(opened.problems, archforge_notations::open_problems(st), "the problems of the session's own store");
+    assert_eq!(opened.problems, archforge_notations::NOTATIONS.open_problems(st), "the problems of the session's own store");
     // UML's own typed problems, asked of UML: the same owners in the same order, in the same words.
     let typed: Vec<_> = archforge_uml::defaults::problems(st).into_iter().map(|d| (d.owner, d.problem.to_string())).collect();
     assert_eq!(opened.problems.iter().map(|p| (p.owner, p.message.clone())).collect::<Vec<_>>(), typed);
@@ -798,8 +799,10 @@ fn unsound_bindings_open_unchanged_and_are_reported() {
     let add = |st: &mut Store| {
         st.create(archforge_diagram::DEFAULT_DIAGRAM_BINDING).unwrap();
     };
-    for refused in [session_from_rows_repaired(&written, ids(1 << 41), retarget).err(), session_from_rows_repaired(&written, ids(1 << 41), add).err()]
-    {
+    for refused in [
+        NOTATIONS.session_from_rows_repaired(&written, ids(1 << 41), retarget).err(),
+        NOTATIONS.session_from_rows_repaired(&written, ids(1 << 41), add).err(),
+    ] {
         assert!(matches!(&refused, Some(OpenError::Unreadable(why)) if why.contains("binding")), "{refused:?}");
     }
 }
@@ -809,14 +812,14 @@ fn unsound_bindings_open_unchanged_and_are_reported() {
 /// reported is the store the session gets: a diagram the repair gives another owner is reported so.
 #[test]
 fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let billing = id(&mut s, "uml.package.add", json!({ "name": "Billing" }));
     let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let rebuilt = |rows: &rows::Rows| rows::restore_into_empty(store(ids(1 << 42)).unwrap(), rows, &tables, &junctions).unwrap();
-    assert!(session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&written)).is_ok(), "the same rows rebuilt open");
+    let rebuilt = |rows: &rows::Rows| rows::restore_into_empty(NOTATIONS.store(ids(1 << 42)).unwrap(), rows, &tables, &junctions).unwrap();
+    assert!(NOTATIONS.session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&written)).is_ok(), "the same rows rebuilt open");
     let binding = s.doc().uuid(archforge_diagram::defaults::bindings(s.doc())[0]).unwrap();
     let (old, new) = (Cell::Id(binding), Cell::Id(Uuid::v7(1_761_670_800_000, [8; 10])));
     let mut renamed = written.clone();
@@ -825,15 +828,16 @@ fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
             *cell = new.clone();
         }
     }
-    let refused = session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&renamed)).err();
+    let refused = NOTATIONS.session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&renamed)).err();
     assert!(matches!(&refused, Some(OpenError::Unreadable(why)) if why.contains("binding")), "{refused:?}");
     // Sales's diagram given to Billing: Sales's binding names another's diagram, and Billing has one but no binding.
-    let opened = archforge_notations::session_from_rows_diagnosed(&written, ids(1 << 41), |st| {
-        let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
-        let (d, billing) = (obj(st, &d), obj(st, &billing));
-        st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(billing)).unwrap();
-    })
-    .unwrap();
+    let opened = archforge_notations::NOTATIONS
+        .session_from_rows_diagnosed(&written, ids(1 << 41), |st| {
+            let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+            let (d, billing) = (obj(st, &d), obj(st, &billing));
+            st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(billing)).unwrap();
+        })
+        .unwrap();
     let expected = [("Sales", "default_diagram_wrong_owner"), ("Billing", "default_diagram_missing")].map(|(p, k)| ("UML", p.to_string(), k));
     assert_eq!(diagnosed(opened.session.doc(), &opened.problems), expected);
 }
@@ -865,7 +869,7 @@ struct Figures {
 
 /// [`Figures`], each made through its notation's commands.
 fn figures() -> Figures {
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let shop = id(&mut s, "uml.package.add", json!({ "name": "shop" }));
     let inner = id(&mut s, "uml.package.add", json!({ "name": "inner", "parent": shop }));
     let class = |s: &mut Session, name: &str| id(s, "uml.class.add", json!({ "package": shop, "name": name }));
@@ -1041,11 +1045,11 @@ fn a_generalization_sets_node_holds_a_label_and_no_other_does() {
 /// what the project holds opens.
 #[test]
 fn a_binding_that_names_nothing_refuses_its_model_before_anything_is_built() {
-    use archforge_notations::{BindingEnd, BrokenBinding, check_bindings_in_rows};
-    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    use archforge_notations::{BindingEnd, BrokenBinding, NOTATIONS, check_bindings_in_rows};
+    let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let fresh = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     assert_eq!(check_bindings_in_rows(&fresh, &tables), Ok(()));
     let at = tables.iter().position(|t| t.name == "diagram_default_diagram_binding").unwrap();
@@ -1060,7 +1064,7 @@ fn a_binding_that_names_nothing_refuses_its_model_before_anything_is_built() {
         let mut broken = fresh.clone();
         broken.tables[at][0][column(name)] = cell;
         let mut built = false;
-        let why = session_from_rows_repaired(&broken, ids(1 << 40), |_| built = true).err().unwrap();
+        let why = NOTATIONS.session_from_rows_repaired(&broken, ids(1 << 40), |_| built = true).err().unwrap();
         assert!(!built, "nothing is built from refused rows");
         assert_eq!(why, OpenError::BrokenBindings(vec![BrokenBinding { binding, end, names }]), "{name}");
     }
@@ -1069,7 +1073,7 @@ fn a_binding_that_names_nothing_refuses_its_model_before_anything_is_built() {
         both.tables[at][0][column(name)] = Cell::Id(gone);
     }
     let said = format!("the default-diagram binding {binding} names the owner {gone}, which the project does not hold, and so do 1 more");
-    assert_eq!(session_from_rows(&both, ids(1 << 40)).err().unwrap().to_string(), said);
+    assert_eq!(NOTATIONS.session_from_rows(&both, ids(1 << 40)).err().unwrap().to_string(), said);
 }
 
 /// A commit check for the test alone: it refuses a change that leaves a diagram named Refused.
@@ -1084,13 +1088,13 @@ fn no_diagram_named_refused(st: &Store, _: &archforge_mof::Delta) -> Result<(), 
 /// The same session keeps one under another name, so the check alone refused it (AR-641).
 #[test]
 fn a_new_replacement_whose_commit_is_refused_is_taken_back_whole() {
-    let mut st = store(ids(0)).unwrap();
+    let mut st = NOTATIONS.store(ids(0)).unwrap();
     st.create(archforge_core::MODEL).unwrap();
-    let checked = archforge_notations::registry_checked(no_diagram_named_refused).unwrap();
-    let mut s = Session::with_view(checked, st, 1, Options::default(), archforge_notations::view());
+    let checked = archforge_notations::NOTATIONS.registry_checked(no_diagram_named_refused).unwrap();
+    let mut s = Session::with_view(checked, st, 1, Options::default(), archforge_notations::NOTATIONS.view());
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let state =
         |s: &Session| (rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.token(), s.undo_label().map(str::to_string), s.undo_revision());
     let remove = |s: &Session, name: &str| {
@@ -1120,7 +1124,7 @@ fn nothing_kept(_: &Store, _: &archforge_mof::Delta) -> Result<(), CommandError>
 fn each_notation_takes_its_own_step_as_a_project_opens_and_a_refused_one_is_said() {
     // Two packages at the top level, no root package: as older projects saved them.
     let older = |registry| {
-        let mut st = store(ids(0)).unwrap();
+        let mut st = NOTATIONS.store(ids(0)).unwrap();
         let model = st.create(archforge_core::MODEL).unwrap();
         st.set(model, archforge_core::named_element::NAME, Value::str("Shop")).unwrap();
         for name in ["Sales", "Billing"] {
@@ -1128,10 +1132,10 @@ fn each_notation_takes_its_own_step_as_a_project_opens_and_a_refused_one_is_said
             st.set(p, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
             st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
         }
-        Session::with_view(registry, st, 1, Options::default(), archforge_notations::view())
+        Session::with_view(registry, st, 1, Options::default(), archforge_notations::NOTATIONS.view())
     };
-    let mut s = older(registry().unwrap());
-    assert_eq!(archforge_notations::open_steps(&mut s), Vec::<String>::new());
+    let mut s = older(NOTATIONS.registry().unwrap());
+    assert_eq!(archforge_notations::NOTATIONS.open_steps(&mut s), Vec::<String>::new());
     let root = archforge_uml::commands::root_package(s.doc()).expect("the root is made");
     assert_eq!(archforge_core::name_of(s.doc(), root), "Shop");
     let held: Vec<String> = archforge_uml::commands::subpackages(s.doc(), root).into_iter().map(|p| archforge_core::name_of(s.doc(), p)).collect();
@@ -1139,15 +1143,15 @@ fn each_notation_takes_its_own_step_as_a_project_opens_and_a_refused_one_is_said
     assert_eq!(s.undo_label(), Some("Make the root package"), "one step, to be undone");
     // Once there is a root, and in a model with no package, no step is taken.
     let revision = s.revision();
-    assert_eq!(archforge_notations::open_steps(&mut s), Vec::<String>::new());
+    assert_eq!(archforge_notations::NOTATIONS.open_steps(&mut s), Vec::<String>::new());
     assert_eq!(s.revision(), revision);
-    let mut fresh = new_project_session("Shop", ids(1 << 40)).unwrap();
+    let mut fresh = NOTATIONS.new_project_session("Shop", ids(1 << 40)).unwrap();
     let revision = fresh.revision();
-    assert_eq!(archforge_notations::open_steps(&mut fresh), Vec::<String>::new());
+    assert_eq!(archforge_notations::NOTATIONS.open_steps(&mut fresh), Vec::<String>::new());
     assert_eq!((fresh.revision(), fresh.undo_label()), (revision, None));
     // A refused step leaves the model as it was and says what it could not do, and why.
-    let mut refused = older(archforge_notations::registry_checked(nothing_kept).unwrap());
-    let said = archforge_notations::open_steps(&mut refused);
+    let mut refused = older(archforge_notations::NOTATIONS.registry_checked(nothing_kept).unwrap());
+    let said = archforge_notations::NOTATIONS.open_steps(&mut refused);
     assert_eq!(said.len(), 1, "{said:?}");
     assert!(said[0].starts_with("the model's packages could not be put under its root package: "), "{said:?}");
     assert!(said[0].contains("nothing is kept"), "{said:?}");

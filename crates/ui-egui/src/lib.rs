@@ -279,13 +279,13 @@ pub trait ProjectHost: Send + Sync {
     /// project). Rows for a project that is no longer open are dropped.
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
-    /// [`ProjectHost::write`] of the model as `model` froze it, its rows built off the interface
-    /// thread by the host's writer; a model that cannot be turned into rows is that write's failure,
-    /// which [`ProjectHost::writing`] tells. This default, for a host with no writer of its own,
-    /// builds them where it is called and only logs a model it cannot turn into rows, so every
-    /// host that writes overrides it.
-    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
-        let (tables, junctions) = archforge_notations::storage();
+    /// [`ProjectHost::write`] of the model as `model` froze it, in the tables of the composition
+    /// `notations` it was made from, its rows built off the interface thread by the host's writer; a
+    /// model that cannot be turned into rows is that write's failure, which [`ProjectHost::writing`]
+    /// tells. This default, for a host with no writer of its own, builds them where it is called and
+    /// only logs a model it cannot turn into rows, so every host that writes overrides it.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        let (tables, junctions) = notations.storage();
         match model.rows(&tables, &junctions) {
             Ok(rows) => self.write(project, rows),
             Err(e) => log::error!("the model could not be turned into rows to save: {e}"),
@@ -865,6 +865,9 @@ pub struct Shell {
     /// Frames run so far.
     pub frames: u64,
     pub(crate) registry: widgets::Registry,
+    /// The notations a project holds, composed: what every session the shell makes, opens, writes and
+    /// compares is made of, as the app registered them (ADR 0003).
+    pub(crate) notations: &'static archforge_notations::Notations,
     /// The diagram kinds whose tools and gestures the canvas offers.
     pub(crate) kinds: &'static [&'static dyn kinds::DiagramKind],
     /// The notations whose elements the explorers, the search, the problems and Properties show.
@@ -995,10 +998,15 @@ pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> b
 }
 
 impl Shell {
-    /// A shell over the host's `services`, on Home, with the notations and the diagram kinds of the
-    /// screens parts the app registered (`screens`), each notation's state made from them, and
-    /// their catalogues and its own registered.
-    pub fn new(services: Services, screens: &'static archforge_shell_api::screens::ScreensRegistry) -> Self {
+    /// A shell over the host's `services`, on Home, making its projects of the notations the app
+    /// composed (`notations`), with the notations and the diagram kinds of the screens parts the app
+    /// registered (`screens`), each notation's state made from them, and their catalogues and its
+    /// own registered.
+    pub fn new(
+        services: Services,
+        notations: &'static archforge_notations::Notations,
+        screens: &'static archforge_shell_api::screens::ScreensRegistry,
+    ) -> Self {
         let notation_uis = screens.notation_uis();
         // The catalogues go in with the notations the shell knows, before anything is said.
         i18n::register_notations(screens.catalogues());
@@ -1007,6 +1015,7 @@ impl Shell {
             state: UiState::default(),
             frames: 0,
             registry: widgets::Registry::default(),
+            notations,
             kinds: screens.kinds(),
             notation_uis,
             fonts: fonts::FontState::default(),
@@ -1417,7 +1426,7 @@ impl Shell {
         if parked.written == Some(revision) {
             return Ok(());
         }
-        host.write_model(&path, session.doc().freeze());
+        host.write_model(&path, session.doc().freeze(), self.notations);
         parked.written = Some(revision);
         Ok(())
     }
@@ -1572,13 +1581,13 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, self.open_repair()).map(|mut s| {
+                    Some(rows) => self.notations.session_from_rows_repaired(rows, ids, self.open_repair()).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }
                         s
                     }),
-                    None => archforge_notations::new_project_session(&project.name, ids).map_err(archforge_notations::OpenError::from),
+                    None => self.notations.new_project_session(&project.name, ids).map_err(archforge_notations::OpenError::from),
                 }
                 .map_err(SessionError::from)
             }
@@ -1597,7 +1606,7 @@ impl Shell {
                 }
                 // A shape an earlier version saved is brought up to date by its notation, each
                 // change one step that is written and can be undone.
-                for failed in archforge_notations::open_steps(&mut s) {
+                for failed in self.notations.open_steps(&mut s) {
                     log::warn!("{failed}");
                 }
                 self.session = Some(s);
@@ -1665,7 +1674,7 @@ impl Shell {
         if self.written == Some(revision) || session.interacting() || self.holding.writes_stopped() || self.viewing.is_some() {
             return;
         }
-        host.write_model(&project.path, session.doc().freeze());
+        host.write_model(&project.path, session.doc().freeze(), self.notations);
         // A failed opening is old news once the open project changes; the first hand-over, of the
         // model it was shown with, is no change, and keeps a reopen's failure said (AR-748).
         if self.written.replace(revision).is_some() {

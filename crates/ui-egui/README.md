@@ -145,12 +145,12 @@ or explorer with nothing to show says so in one line, never with a help text.
 
 | Item | Signature |
 |---|---|
-| `Shell::new` | `pub fn new(services: Services, screens: &'static ScreensRegistry) -> Shell`: on Home, with the notations and diagram kinds of the screens parts the app registered (`archforge_shell_api::screens`), each notation's state made from them and their catalogues registered |
+| `Shell::new` | `pub fn new(services: Services, notations: &'static Notations, screens: &'static ScreensRegistry) -> Shell`: on Home, making its projects of the notations the app composed (`archforge_notations::Notations`; the app hands it `archforge_notations::NOTATIONS`), with the notations and diagram kinds of the screens parts the app registered (`archforge_shell_api::screens`), each notation's state made from them and their catalogues registered |
 | `Shell::logic` | `pub fn logic(&mut self, ctx: &egui::Context)` (once per frame, before drawing) |
 | `Shell::ui` | `pub fn ui(&mut self, ui: &mut egui::Ui)` (draws the whole window) |
 | `Shell::request_quit` | `pub fn request_quit(&mut self)` (closes the window at the next frame) |
 | `Shell::open_project`, `Shell::close_project` | `pub fn open_project(&mut self, opened: Opened)`, `pub fn close_project(&mut self)`: the workspace replaces Home and back |
-| `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its session (made once per project through `archforge_notations::new_project_session`), why none could be made |
+| `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its session (made once per project through the composition of notations the app handed `Shell::new`), why none could be made |
 | `Shell::location` | `pub fn location(&self) -> Option<String>`: where the project lives, as the status bar says it |
 | `state::{Explorer, Panel}` | the workspace's explorer and right panel, part of `UiState`; `archforge-shell-api`'s `state`, re-exported under their old paths, as the narrow context's requests name them |
 | `Shell::attach_control` | `pub fn attach_control(&mut self, requests: Receiver<control::ControlRequest>, generation: control::SessionGeneration)`: the requests of every opening of agent access (the person's own and Chat's); the shell answers once per frame, as each request's token allows |
