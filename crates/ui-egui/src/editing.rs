@@ -18,9 +18,7 @@ use serde_json::json;
 pub(crate) use archforge_shell_api::editing::Action;
 use archforge_shell_api::editing::ask_delete_of;
 pub use archforge_shell_api::editing::{Corner, ElementMenu, Gesture, NodeRename, NoteEdit, diagrams_showing};
-pub(crate) use archforge_shell_api::editing::{
-    ask_delete_cx, element_of, hit, new_row_keys, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, unplace_cx, uuid,
-};
+pub(crate) use archforge_shell_api::editing::{ask_delete_cx, element_of, hit, nodes_of, select_cx, unit_rect, unplace_cx, uuid};
 
 use crate::canvas::{CARD_FIRST_ROW, CARD_HEADER, CARD_ROW, Tool, View};
 use crate::home::control;

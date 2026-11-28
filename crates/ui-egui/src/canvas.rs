@@ -24,7 +24,7 @@ pub(crate) use archforge_shell_api::canvas::{
     real, refs, row_at, say, with_draft, zoom_by,
 };
 pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, line, self_loop};
-pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_glyph, end_glyph_on, end_handles_at, exit_point, nesting_route};
+pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_glyph, end_handles_at, exit_point, nesting_route};
 use archforge_shell_api::canvas::{Slot, beside, beside_pair, keep_left_view, mark_shape, model_rect, settle_view, slots, string};
 pub use archforge_shell_api::kinds::ExtraLabel;
 pub(crate) use archforge_shell_api::kinds::{CardDrawn, LineDrawn, LineEnds};

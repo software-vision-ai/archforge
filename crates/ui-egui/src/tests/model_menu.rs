@@ -1,6 +1,7 @@
 //! The Model menu: its rows are what the open diagram's tools make, each arms that tool and no
 //! other, and all of them answer to the one rule of when a tool can be picked.
 
+use archforge_er_ui::snapshot::er_kind;
 use egui::Key::{ArrowDown, ArrowRight, Enter, F10};
 
 use super::*;
@@ -148,7 +149,7 @@ fn ids_of(rows: &[&[crate::kinds::ModelRow]]) -> Vec<Vec<&'static str>> {
 #[test]
 fn each_kind_answers_its_own_rows() {
     use crate::kinds::DiagramKind;
-    assert_eq!(ids_of(crate::er_kind::ErKind.menu_rows()), [ER_ROWS.to_vec()]);
+    assert_eq!(ids_of(er_kind::ErKind.menu_rows()), [ER_ROWS.to_vec()]);
     let classifiers = ["model.class", "model.interface", "model.enumeration", "model.data-type", "model.primitive-type", "model.package"];
     let relate = [
         vec![
@@ -198,8 +199,7 @@ fn each_kind_answers_its_own_rows() {
 fn the_entries_are_made_from_the_rows_data() {
     use crate::kinds::DiagramKind;
     for theme in BOTH {
-        let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] =
-            [(er(theme), &crate::er_kind::ErKind), (uml_sized(theme, BIG), &uml_ui::UmlKind)];
+        let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] = [(er(theme), &er_kind::ErKind), (uml_sized(theme, BIG), &uml_ui::UmlKind)];
         for (mut h, kind) in kinds {
             let s = h.state_mut();
             for (_, row) in crate::model_menu::rows(&[kind]) {

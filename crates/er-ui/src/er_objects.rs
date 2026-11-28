@@ -13,14 +13,14 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::checks::badge;
-use crate::cx::Ctx;
+use crate::er_checks::badge;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::i18n::{fmt, tr, tr_ctx};
-use crate::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr, tr_ctx};
+use archforge_shell_api::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx};
+use archforge_shell_api::widgets;
 
 /// The most columns the Owned by menu offers.
 const MAX_OWNERS: usize = 30;
@@ -118,7 +118,7 @@ pub fn view_rows(store: &Store, schema: Obj) -> Vec<ObjectRow> {
 }
 
 /// Opens the editor on a sequence or view, or on one of `kind` to add to `schema`.
-pub(crate) fn open(cx: &mut Ctx, schema: Uuid, kind: ObjectKind, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, schema: Uuid, kind: ObjectKind, target: Option<Uuid>) {
     let mut edit = ObjectEdit {
         kind,
         target,
@@ -194,7 +194,7 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
     y = next - 6.0;
     let editing = |cx: &Ctx| er(cx.notation_states).and_then(|er| er.object_edit.as_ref()).filter(|e| e.kind == kind).cloned();
     let editing_new = editing(cx).is_some_and(|e| e.target.is_none() && e.schema == schema_id);
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for row in &list {
         if editing(cx).is_some_and(|e| e.target == Some(row.id)) {
             y = editor(cx, ui, p, r, y, schema);
@@ -211,11 +211,11 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
         badge(&paint, rect.min + vec2(2.0, 6.0), label, p.field, p.text_secondary);
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element_cx(cx, row.id);
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
+            archforge_shell_api::panels::select_element_cx(cx, row.id);
             open(cx, schema_id, kind, Some(row.id));
         } else if resp.clicked() {
-            crate::panels::select_element_cx(cx, row.id);
+            archforge_shell_api::panels::select_element_cx(cx, row.id);
         }
         y += 44.0;
     }
@@ -261,7 +261,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, schema:
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::er_state::OBJECT, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::er_state::OBJECT, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -304,7 +304,8 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, schema:
             cy += row + 4.0;
             if cx.panels.menu == Some(menus::OWNED_BY) {
                 // Past the most the menu lists, it says how many it leaves out; the command takes any.
-                let tail = (more > 0).then(|| crate::i18n::trn("{n} more column, not listed", "{n} more columns, not listed", more as u64));
+                let tail =
+                    (more > 0).then(|| archforge_shell_api::i18n::trn("{n} more column, not listed", "{n} more columns, not listed", more as u64));
                 let items: Vec<String> = std::iter::once(tr("None")).chain(list.iter().map(|(_, l)| l.clone())).chain(tail).collect();
                 if let Some(i) = menu_cx(cx, ui, p, field, "workspace.properties.sequence.owned-by", &items) {
                     if i == 0 {
@@ -475,7 +476,7 @@ fn commit(cx: &mut Ctx, edit: &ObjectEdit) {
 }
 
 /// Every hover text and field label to translate, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add sequence", "Add view"].into_iter()
 }

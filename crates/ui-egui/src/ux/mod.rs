@@ -7,8 +7,6 @@
 
 pub use archforge_shell_api::ux::*;
 
-pub mod icons;
-
 use egui::FontFamily;
 
 /// The app icon's picture (`assets/app-icon/icon.png`, the beaver's tile filling the square), built

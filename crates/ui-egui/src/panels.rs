@@ -18,9 +18,8 @@ pub use archforge_shell_api::notation_ui::MenuId;
 pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor, Subject};
 pub use archforge_shell_api::panels::{DescriptionDraft, NameEdit, State};
 pub(crate) use archforge_shell_api::panels::{
-    FIELD, FieldOut, PAD, ROW, check_cx, control_cx, edit_button_cx, edit_field_cx, field_inner, ghost_button_cx, icon_button_cx, into_view, menu_cx,
-    name_field_cx, off_words_cx, problems_section_cx, refused_on_cx, reveal_cx, section_cx, select_element_cx, select_field_cx, selected_id_cx,
-    text_field_cx,
+    FIELD, FieldOut, PAD, ROW, control_cx, edit_field_cx, field_inner, ghost_button_cx, icon_button_cx, into_view, menu_cx, name_field_cx,
+    off_words_cx, problems_section_cx, refused_on_cx, section_cx, text_field_cx,
 };
 pub(crate) use archforge_shell_api::panels::{refusal, run_cx, said, string_of};
 

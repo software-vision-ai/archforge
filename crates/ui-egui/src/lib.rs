@@ -21,21 +21,13 @@ pub mod chat_panel;
 pub mod chat_store;
 mod chat_view;
 pub mod chat_words;
-pub mod checks;
 mod clock;
 pub mod close_ask;
-pub mod connect;
 pub mod control;
 mod cx;
 pub mod diagrams;
 mod edit_menu;
 pub mod editing;
-mod er_kind;
-pub mod er_place;
-mod er_said;
-mod er_state;
-pub mod er_table;
-mod er_ui;
 pub mod explorer;
 mod field_keys;
 pub mod fonts;
@@ -44,8 +36,6 @@ pub mod hold;
 pub mod home;
 pub mod home_search;
 pub mod i18n;
-pub mod indexes;
-pub mod keys;
 mod kinds;
 mod leaving;
 pub mod markdown;
@@ -54,13 +44,11 @@ pub mod model_menu;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;
-pub mod objects;
 #[cfg(any(test, feature = "snapshot"))]
 pub mod offscreen;
 pub mod panels;
 pub mod problems;
 mod project_search;
-pub mod relation;
 pub mod replace;
 mod restore_ask;
 pub mod save_version;
@@ -70,13 +58,11 @@ pub mod skill_tab;
 #[cfg(any(test, feature = "snapshot"))]
 pub mod snapshot;
 pub mod state;
-pub mod subtypes;
 pub mod support;
 mod switch_ask;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod theme;
-pub mod types;
 pub mod ux;
 pub mod version_chip;
 mod version_details;
@@ -88,7 +74,6 @@ pub mod workspace;
 
 /// The automation registry, from the shell's interfaces, under the path the shell's code names it by.
 pub use archforge_shell_api::widgets;
-pub use er_ui::ER;
 pub use fonts::{FontEntry, FontSource};
 pub use state::UiState;
 

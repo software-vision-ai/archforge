@@ -13,8 +13,8 @@ mod check;
 const FACES: &[(&str, &str)] = &[("Inter", "Regular"), ("Inter", "SemiBold")];
 
 /// Writes the faces, then fails the build at a catalogue row that does not have four columns, in
-/// the shell's catalogues or a notation's (a folder of its own under `i18n`), or at a listing of
-/// the catalogues that fails part way.
+/// the shell's catalogues under `i18n` (each notation's screens crate checks its own), or at a
+/// listing of the catalogues that fails part way.
 fn main() {
     faces();
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();

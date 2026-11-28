@@ -2,12 +2,12 @@
 //! a key, a check, an index, a type and a sequence or view, a relationship's role being typed with
 //! its More and its key card, and on the canvas the ends a new relationship gets and the mapping
 //! table offer. The shell holds it as one notation's state among others
-//! ([`crate::notation_ui::NotationState`]); ER's screens reach it through [`er`] and [`er_mut`].
+//! ([`archforge_shell_api::notation_ui::NotationState`]); ER's screens reach it through [`er`] and [`er_mut`].
 
 use archforge_mof::{Store, Uuid};
 
-use crate::notation_ui::{NotationState, NotationStates};
-use crate::panels::{Editor, MenuId, OpenEditor};
+use archforge_shell_api::notation_ui::{Editor, MenuId, OpenEditor};
+use archforge_shell_api::notation_ui::{NotationState, NotationStates};
 
 /// The column editor's card.
 pub(crate) const COLUMN: Editor = Editor { notation: archforge_er::INDEX, card: "column" };
@@ -25,8 +25,8 @@ pub(crate) const OBJECT: Editor = Editor { notation: archforge_er::INDEX, card: 
 /// ER's menus in the shell's one open-menu slot, each by its key among ER's: only ER's screens open
 /// and recognise them. A menu shown once per row is the first of its kind here, and
 /// [`MenuId::at`] names the row's.
-pub(crate) mod menus {
-    use crate::panels::MenuId;
+pub mod menus {
+    use archforge_shell_api::notation_ui::MenuId;
 
     /// The menu `key` of ER.
     const fn er(key: &'static str) -> MenuId {
@@ -34,66 +34,66 @@ pub(crate) mod menus {
     }
 
     /// A table's Kind: regular or mapping table.
-    pub(crate) const KIND: MenuId = er("kind");
+    pub const KIND: MenuId = er("kind");
     /// A relationship's foreign key (slice E3): what it points to, one key pair's child column
     /// (by the pair), the two referential actions, deferrability and match.
-    pub(crate) const POINTS: MenuId = er("points");
-    pub(crate) const PAIR: MenuId = er("pair");
-    pub(crate) const ON_DELETE: MenuId = er("on-delete");
-    pub(crate) const ON_UPDATE: MenuId = er("on-update");
-    pub(crate) const DEFERRABLE: MenuId = er("deferrable");
-    pub(crate) const MATCH: MenuId = er("match");
+    pub const POINTS: MenuId = er("points");
+    pub const PAIR: MenuId = er("pair");
+    pub const ON_DELETE: MenuId = er("on-delete");
+    pub const ON_UPDATE: MenuId = er("on-update");
+    pub const DEFERRABLE: MenuId = er("deferrable");
+    pub const MATCH: MenuId = er("match");
     /// The key editor's Add a column select (slice E4).
-    pub(crate) const KEY_COLUMN: MenuId = er("key-column");
+    pub const KEY_COLUMN: MenuId = er("key-column");
     /// The column editor's Generation select (slice S2).
-    pub(crate) const GENERATION: MenuId = er("generation");
+    pub const GENERATION: MenuId = er("generation");
     /// The index editor's Add a column select, and a column row's nulls order, by the row (slice
     /// S3).
-    pub(crate) const INDEX_COLUMN: MenuId = er("index-column");
-    pub(crate) const INDEX_NULLS: MenuId = er("index-nulls");
+    pub const INDEX_COLUMN: MenuId = er("index-column");
+    pub const INDEX_NULLS: MenuId = er("index-nulls");
     /// Which kind of type the Types section adds, and the column editor's type menu (slice S5).
-    pub(crate) const TYPE_KIND: MenuId = er("type-kind");
-    pub(crate) const COLUMN_TYPE: MenuId = er("column-type");
+    pub const TYPE_KIND: MenuId = er("type-kind");
+    pub const COLUMN_TYPE: MenuId = er("column-type");
     /// The Subtypes section's table menu, discriminator and mapping (slice S6).
-    pub(crate) const SUBTYPE_ADD: MenuId = er("subtype-add");
-    pub(crate) const DISCRIMINATOR: MenuId = er("discriminator");
-    pub(crate) const MAPPING: MenuId = er("mapping");
+    pub const SUBTYPE_ADD: MenuId = er("subtype-add");
+    pub const DISCRIMINATOR: MenuId = er("discriminator");
+    pub const MAPPING: MenuId = er("mapping");
     /// The sequence editor's Owned by select (slice S7).
-    pub(crate) const OWNED_BY: MenuId = er("owned-by");
+    pub const OWNED_BY: MenuId = er("owned-by");
 }
 
 /// ER's editors and tools between frames.
 #[derive(Debug, Default)]
-pub(crate) struct ErState {
+pub struct ErState {
     /// The column editor, open on a column or on a column about to be added.
     pub column: Option<crate::er_table::ColumnEdit>,
     /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
-    pub key: Option<crate::keys::KeyEdit>,
+    pub key: Option<crate::er_keys::KeyEdit>,
     /// The check and index editors (slice S3).
-    pub check: Option<crate::checks::CheckEdit>,
-    pub index: Option<crate::indexes::IndexEdit>,
+    pub check: Option<crate::er_checks::CheckEdit>,
+    pub index: Option<crate::er_indexes::IndexEdit>,
     /// The domain or enum editor (slice S5).
-    pub type_edit: Option<crate::types::TypeEdit>,
+    pub type_edit: Option<crate::er_types::TypeEdit>,
     /// The sequence or view editor (slice S7).
-    pub object_edit: Option<crate::objects::ObjectEdit>,
+    pub object_edit: Option<crate::er_objects::ObjectEdit>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
     /// relationship whose switch asked for a key its parent cannot give.
-    pub role: Option<crate::relation::RoleEdit>,
+    pub role: Option<crate::er_relation::RoleEdit>,
     pub more_open: bool,
     pub no_key_card: Option<Uuid>,
     /// The ends a new relationship line gets (slice E2).
-    pub relationship: crate::connect::RelKind,
+    pub relationship: crate::er_connect::RelKind,
     /// The mapping table offer.
-    pub mapping: Option<crate::connect::MappingOffer>,
+    pub mapping: Option<crate::er_connect::MappingOffer>,
 }
 
 /// ER's state among the shell's; none while ER is not one of its notations.
-pub(crate) fn er(states: &NotationStates) -> Option<&ErState> {
+pub fn er(states: &NotationStates) -> Option<&ErState> {
     states.own()
 }
 
 /// ER's state among the shell's, to change; none while ER is not one of its notations.
-pub(crate) fn er_mut(states: &mut NotationStates) -> Option<&mut ErState> {
+pub fn er_mut(states: &mut NotationStates) -> Option<&mut ErState> {
     states.own_mut()
 }
 
@@ -105,7 +105,7 @@ fn gone(store: &Store, id: Uuid) -> bool {
 impl NotationState for ErState {
     /// Drops an editor whose table, schema or item is gone, a role or key card whose relationship
     /// is, and the mapping offer of a relationship no longer alive.
-    fn retain_valid(&mut self, store: &Store, canvas: &crate::canvas::State) {
+    fn retain_valid(&mut self, store: &Store, canvas: &archforge_shell_api::canvas::State) {
         let _ = canvas;
         let item_gone = |owner: Uuid, target: Option<Uuid>| gone(store, owner) || target.is_some_and(|t| gone(store, t));
         if self.column.as_ref().is_some_and(|c| item_gone(c.entity, c.target)) {

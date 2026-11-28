@@ -13,20 +13,22 @@ use archforge_shell_api::screens::ScreensPart;
 use egui::Rect;
 use serde_json::json;
 
-use crate::cx::Ctx;
-use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{Rows, fmt, tr, trn};
-use crate::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
-use crate::panels::{FIELD, Subject};
-use crate::problems::Problem;
 use crate::ux::{Palette, icons};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::explorer::fresh_name;
+use archforge_shell_api::i18n::{Rows, fmt, tr, trn};
+use archforge_shell_api::notation_ui::Problem;
+use archforge_shell_api::notation_ui::Subject;
+use archforge_shell_api::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
+use archforge_shell_api::notation_ui::{Row, Tree};
+use archforge_shell_api::panels::FIELD;
 
 /// ER's screens part, as the app registers it (`archforge_shell_api::screens`): ER in the shell
 /// and its diagram kind. The shell exports it until ER's screens have a crate of their own.
 pub const ER: ScreensPart = ScreensPart { ui: &ErUi, kinds: &[&crate::er_kind::ErKind] };
 
 /// ER in the shell.
-pub(crate) struct ErUi;
+pub struct ErUi;
 
 /// ER's own catalogue of each language, in the order of `LANGUAGES`, embedded: the rows only
 /// ER's screens name ([`NotationUi::catalogues`]).
@@ -56,7 +58,7 @@ fn class(store: &Store, o: Obj) -> Option<archforge_mof::ClassId> {
 /// A relationship's tables as its line runs, `Customer → Order`.
 fn relationship_ends(store: &Store, o: Obj) -> String {
     let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();
-    crate::notation_ui::ends_label(&end(archforge_er::relationship::FROM), &end(archforge_er::relationship::TO))
+    archforge_shell_api::notation_ui::ends_label(&end(archforge_er::relationship::FROM), &end(archforge_er::relationship::TO))
 }
 
 /// The schemas of the model, in the order the model lists them.
@@ -189,7 +191,7 @@ impl NotationUi for ErUi {
         let out = match key {
             "schema" => {
                 let Some(name) = fresh_name("Schema", schemas(store).into_iter().map(|s| name(store, s)), false) else { return no_name() };
-                crate::panels::run_cx(cx, "er.schema.add", json!({ "name": name }))
+                archforge_shell_api::panels::run_cx(cx, "er.schema.add", json!({ "name": name }))
             }
             "table" => {
                 let schema = sel.and_then(|o| r::schema_of(store, o))?;
@@ -287,7 +289,7 @@ impl NotationUi for ErUi {
                 // The search asks this of the notation of `o`, which for a relationship of ER's is
                 // ER: its label is asked of ER alone.
                 let ends = relationship_ends(store, o);
-                entry(&icons::LINK, 4, crate::notation_ui::label(&[&ErUi], store, o), place(tr("Relationship"), ends))
+                entry(&icons::LINK, 4, archforge_shell_api::notation_ui::label(&[&ErUi], store, o), place(tr("Relationship"), ends))
             }
             c if c == archforge_er::DOMAIN => entry(&icons::DOMAIN, 5, name(store, o), place(tr("Domain"), schema_name(o))),
             c if c == archforge_er::ENUM_TYPE => entry(&icons::ENUM, 5, name(store, o), place(tr("Enum type"), schema_name(o))),
@@ -328,7 +330,7 @@ impl NotationUi for ErUi {
                 for k in r::primary_key_of(store, o).into_iter().chain(r::unique_constraints(store, o)) {
                     let primary = store.class_of(k).ok() == Some(archforge_er::PRIMARY_KEY);
                     if let Some(p) = r::key_columns_problem(store, o, &r::key_columns(store, k), primary) {
-                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = archforge_shell_api::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &said)]) });
                     }
                 }
@@ -340,13 +342,13 @@ impl NotationUi for ErUi {
                 }
                 for a in children(store, o, archforge_er::entity::ATTRIBUTE) {
                     if let Some(p) = r::enum_default_problem(store, a) {
-                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = archforge_shell_api::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &said)]) });
                     }
                 }
                 for c in r::checks_of(store, o) {
                     if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
-                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = archforge_shell_api::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &said)]),
@@ -357,7 +359,7 @@ impl NotationUi for ErUi {
                     if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
                         // The columns' problem is typed, so it is said in the user's words, the English
                         // only for a reason the interface doesn't say.
-                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = archforge_shell_api::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &said)]),
@@ -369,7 +371,7 @@ impl NotationUi for ErUi {
                     let text = match (parts.entity, parts.key) {
                         // A key or a foreign key in no table or schema has no typed reason, so its English.
                         (Some(e), Some(k)) => r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
-                            .map(|p| p.reason().and_then(|reason| crate::panels::said(uis, &reason)).unwrap_or_else(|| p.said())),
+                            .map(|p| p.reason().and_then(|reason| archforge_shell_api::panels::said(uis, &reason)).unwrap_or_else(|| p.said())),
                         _ => Some(tr("lacks its table or its key")),
                     };
                     if let Some(p) = text {
@@ -387,7 +389,7 @@ impl NotationUi for ErUi {
             {
                 // The literals' rule is typed, so it is said in the user's words, the English only
                 // for a reason the interface doesn't say.
-                let said = crate::panels::said(uis, &p.reason).unwrap_or_else(|| p.to_string());
+                let said = archforge_shell_api::panels::said(uis, &p.reason).unwrap_or_else(|| p.to_string());
                 out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &said)]) });
             }
             if class == archforge_er::RELATIONSHIP {
@@ -455,7 +457,7 @@ impl NotationUi for ErUi {
             c if c == archforge_er::RELATIONSHIP => Some(relationship_ends(store, o)),
             c if c == archforge_er::GENERALIZATION => {
                 let (sup, sub, _) = r::generalization_parts(store, o);
-                Some(crate::notation_ui::ends_label(&name(store, sub?), &name(store, sup?)))
+                Some(archforge_shell_api::notation_ui::ends_label(&name(store, sub?), &name(store, sup?)))
             }
             _ => None,
         }
@@ -491,27 +493,36 @@ impl NotationUi for ErUi {
     /// relationship's panel, and for a column, a type, a sequence, a view or a generalization the
     /// panel of what holds it, its own row marked.
     fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
-        let width = r.width() - 2.0 * crate::panels::PAD;
+        let width = r.width() - 2.0 * archforge_shell_api::panels::PAD;
         match subject.class {
             Some(c) if c == archforge_er::SCHEMA => {
-                crate::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, "er.schema.rename", "schema");
+                archforge_shell_api::panels::name_field_cx(
+                    cx,
+                    ui,
+                    p,
+                    egui::pos2(r.left() + archforge_shell_api::panels::PAD, y),
+                    width,
+                    subject,
+                    "er.schema.rename",
+                    "schema",
+                );
                 if let (Some(o), Some(id)) = (subject.obj, subject.id) {
-                    let y = crate::types::types_section(cx, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
-                    let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
-                    let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
-                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, o);
+                    let y = crate::er_types::types_section(cx, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
+                    let y = crate::er_objects::section_of(cx, ui, p, r, y, o, id, crate::er_objects::ObjectKind::Sequence);
+                    let y = crate::er_objects::section_of(cx, ui, p, r, y, o, id, crate::er_objects::ObjectKind::View);
+                    archforge_shell_api::panels::problems_section_cx(cx, ui, p, r, y + 4.0, o);
                 }
             }
             Some(c) if c == archforge_er::GENERALIZATION => {
                 // A generalization: its supertype's Subtypes section.
                 let sup = cx.session.as_ref().and_then(|s| {
                     let store = s.doc();
-                    let sup = crate::subtypes::supertype_of_link(store, subject.obj?)?;
+                    let sup = crate::er_subtypes::supertype_of_link(store, subject.obj?)?;
                     Some((sup, store.uuid(sup).ok()?))
                 });
                 if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
-                    let y = crate::subtypes::subtypes_section(cx, ui, p, r, y, sup, sup_id, id);
-                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, sup);
+                    let y = crate::er_subtypes::subtypes_section(cx, ui, p, r, y, sup, sup_id, id);
+                    archforge_shell_api::panels::problems_section_cx(cx, ui, p, r, y + 4.0, sup);
                 }
             }
             Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
@@ -519,11 +530,11 @@ impl NotationUi for ErUi {
                 let schema = cx.session.as_ref().and_then(|s| {
                     let store = s.doc();
                     let schema = r::schema_of(store, subject.obj?)?;
-                    Some((schema, store.uuid(schema).ok()?, crate::types::kind_of(store, subject.obj?)?))
+                    Some((schema, store.uuid(schema).ok()?, crate::er_types::kind_of(store, subject.obj?)?))
                 });
                 if let Some((schema, schema_id, _)) = schema {
-                    let y = crate::types::types_section(cx, ui, p, r, y, schema, schema_id);
-                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
+                    let y = crate::er_types::types_section(cx, ui, p, r, y, schema, schema_id);
+                    archforge_shell_api::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
                 }
             }
             Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
@@ -531,15 +542,15 @@ impl NotationUi for ErUi {
                 let schema = cx.session.as_ref().and_then(|s| {
                     let store = s.doc();
                     let schema = r::schema_of(store, subject.obj?)?;
-                    Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
+                    Some((schema, store.uuid(schema).ok()?, crate::er_objects::kind_of(store, subject.obj?)?))
                 });
                 if let Some((schema, schema_id, kind)) = schema {
-                    let y = crate::objects::section_of(cx, ui, p, r, y, schema, schema_id, kind);
-                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
+                    let y = crate::er_objects::section_of(cx, ui, p, r, y, schema, schema_id, kind);
+                    archforge_shell_api::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
                 }
             }
             Some(c) if c == archforge_er::ENTITY => crate::er_table::entity_body(cx, ui, p, r, y, subject),
-            Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(cx, ui, p, r, y, subject),
+            Some(c) if c == archforge_er::RELATIONSHIP => crate::er_relation::body(cx, ui, p, r, y, subject),
             Some(c) if c == archforge_er::ATTRIBUTE => {
                 // A column: its table's panel, the column's row marked.
                 let table = cx.session.as_ref().and_then(|s| {
@@ -654,14 +665,14 @@ impl NotationUi for ErUi {
     /// A selected relationship goes from the model with its foreign key and the key columns that
     /// key brought, without Shift; with Shift, the shared removals ask about its line.
     fn canvas_delete(&self, cx: &mut Ctx, shift: bool) -> bool {
-        !shift && crate::connect::remove_selected_relationship(cx)
+        !shift && crate::er_connect::remove_selected_relationship(cx)
     }
 
     /// The mapping table offer, over the fade and under the toast, while one is open; it closes
     /// itself once its relationship is gone. Nothing at the other layers.
     fn canvas_overlay(&self, cx: &mut Ctx, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
         if layer == Layer::Offers {
-            crate::connect::mapping_offer(cx, ui, on.p, on.r);
+            crate::er_connect::mapping_offer(cx, ui, on.p, on.r);
         }
     }
 
@@ -672,7 +683,7 @@ impl NotationUi for ErUi {
 
     /// Opens the mapping table offer for the many-to-many relationship `element`.
     fn resolve(&self, cx: &mut Ctx, element: Uuid) {
-        crate::connect::offer_mapping(cx, element);
+        crate::er_connect::offer_mapping(cx, element);
     }
 
     /// Every table box too short for its table's columns grows to show them all
@@ -684,8 +695,8 @@ impl NotationUi for ErUi {
 
 /// The words of ER's figures, which reach `tr` through the figures' descriptions, for the
 /// catalogue tests.
-#[cfg(any(test, feature = "testing"))]
-pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+#[cfg(feature = "snapshot")]
+pub fn texts() -> impl Iterator<Item = &'static str> {
     archforge_er::figures::WORDS.iter().copied()
 }
 
@@ -708,3 +719,42 @@ const CREATED: &[ClassId] = &[
     archforge_er::UNIQUE_CONSTRAINT,
     archforge_er::VIEW,
 ];
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use archforge_shell_api::i18n::{LANGUAGES, register};
+    use archforge_shell_api::notation_ui::NotationUi;
+
+    /// Adds the catalogue files under `dir` to `out`, each by its path from the catalogues' folder
+    /// (`er/de.tsv`), as the build script walks them; a listing that fails part way fails the test.
+    fn catalogue_files(dir: &Path, under: &str, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry.file_type().unwrap().is_dir() {
+                catalogue_files(&entry.path(), &format!("{under}{name}/"), out);
+            } else if name.ends_with(".tsv") {
+                out.push(format!("{under}{name}"));
+            }
+        }
+    }
+
+    /// Every catalogue file under the folder, which the build script checks, is one of ER's
+    /// registered catalogues ([`NotationUi::catalogues`]), and every one of them is a file there;
+    /// they are one for each language, in the languages' order, so the machinery takes them.
+    #[test]
+    fn every_catalogue_in_the_folder_is_registered() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
+        let mut files = Vec::new();
+        catalogue_files(&dir, "", &mut files);
+        files.sort();
+        let catalogues = super::ErUi.catalogues();
+        let mut registered: Vec<&str> = catalogues.iter().map(|rows| rows.catalogue).collect();
+        registered.sort();
+        assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
+        let languages: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
+        assert_eq!(catalogues.iter().map(|rows| rows.code).collect::<Vec<_>>(), languages, "one for each language, in the languages' order");
+        assert_eq!(register(catalogues), Ok(()), "the machinery takes ER's catalogues");
+    }
+}

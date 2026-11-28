@@ -10,12 +10,12 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::checks::badge;
-use crate::cx::Ctx;
+use crate::er_checks::badge;
 use crate::er_state::menus;
-use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check_cx, control_cx, menu_cx, run_cx, section_cx, select_field_cx};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{FIELD, PAD, check_cx, control_cx, menu_cx, run_cx, section_cx, select_field_cx};
 
 /// The mappings as the select offers them: the engine's word and the label.
 pub(crate) const MAPPINGS: [(archforge_er::SubtypeMapping, &str); 3] = [
@@ -250,7 +250,7 @@ pub(crate) fn supertype_of_link(store: &Store, g: Obj) -> Option<Obj> {
 }
 
 /// Every text of the tables, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add subtype"].into_iter().chain(MAPPINGS.iter().map(|(_, l)| *l))
 }

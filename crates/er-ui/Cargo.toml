@@ -1,0 +1,33 @@
+[package]
+name = "archforge-er-ui"
+description = "ER's screens: what ER brings to the shell through the shell's interfaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# What the screenshot tool, the app's tests and the shell's tests reach in ER's screens
+# (`archforge_er_ui::snapshot`): the word lists and the items they name; never shipped.
+snapshot = []
+
+[dependencies]
+# The names and skills of the elements ER's screens show.
+archforge-core.workspace = true
+# The diagrams, nodes and lines ER's screens draw and place.
+archforge-diagram.workspace = true
+# The refusals and reasons ER's screens say.
+archforge-engine.workspace = true
+archforge-er.workspace = true
+archforge-mof.workspace = true
+archforge-shell-api.workspace = true
+egui.workspace = true
+# Says a table box that could not be grown to show its columns.
+log.workspace = true
+# The parameters of the commands ER's screens run.
+serde_json.workspace = true
+
+[lints]
+workspace = true

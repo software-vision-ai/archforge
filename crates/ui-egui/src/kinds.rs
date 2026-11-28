@@ -17,7 +17,7 @@
 
 use archforge_mof::{Obj, Store};
 
-pub(crate) use archforge_shell_api::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, Press, ToolUse, diagram_icon};
+pub(crate) use archforge_shell_api::kinds::{DiagramKind, MenuRow, ModelRow, Press, ToolUse, diagram_icon};
 
 use crate::Shell;
 

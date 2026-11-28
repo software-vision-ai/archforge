@@ -54,7 +54,9 @@ pub const TABLE: &[(&str, Class)] = &[
     // shell's interfaces: what a notation's screens implement and may use from the shell (ADR 0003).
     ("shell-api", Class::Layer(9)),
     // Layer 10 is the notations' screens crates' (ADR 0002), each above the shell's interfaces:
-    // UML's, which depends on UML's model, the shell's interfaces and the crates below them.
+    // ER's and UML's, each of which depends on its notation's model, the shell's interfaces and the
+    // crates below them.
+    ("er-ui", Class::Layer(10)),
     ("uml-ui", Class::Layer(10)),
     ("ui-egui", Class::Layer(11)),
     // Host services, for the desktop only: the application uses them and they sit above the shell,
@@ -291,7 +293,7 @@ mod tests {
     #[test]
     fn the_interface_layers_run_from_the_shell_interfaces_to_the_shell() {
         assert_eq!(interface_layers(), 9..=11);
-        assert_eq!(interface_crates(), vec![SHELL_API, "uml-ui", SHELL]);
+        assert_eq!(interface_crates(), vec![SHELL_API, "er-ui", "uml-ui", SHELL]);
         assert!(!is_interface(Class::Layer(8)) && is_interface(Class::Layer(10)) && !is_interface(Class::Layer(12)));
         assert!(!is_interface(Class::Standalone) && !is_interface(Class::Exempt));
         for host in ["control", "secrets", "agents", "mcp", "dolt", "project"] {
@@ -310,13 +312,14 @@ mod tests {
         assert_eq!(violations(&packages), Vec::<String>::new());
     }
 
-    /// The source scan reads every crate on the interface's layers, the shell's interfaces and
-    /// UML's screens as well as the shell, and names the crate of each finding.
+    /// The source scan reads every crate on the interface's layers, the shell's interfaces and the
+    /// notations' screens as well as the shell, and names the crate of each finding.
     #[test]
     fn the_source_scan_reads_every_interface_crate() {
         let tree = util::Scratch::new("interface-scan").unwrap();
         tree.file("ui-egui/src/lib.rs", "pub fn draw() {}\nuse std::net::Ipv4Addr;\n").unwrap();
         tree.file("shell-api/src/lib.rs", "pub fn quit() {\n    std::process::exit(0)\n}\n").unwrap();
+        tree.file("er-ui/src/lib.rs", "use std::net::UdpSocket;\n").unwrap();
         tree.file("uml-ui/src/lib.rs", "use std::process::Command;\n").unwrap();
         tree.file("dolt/src/lib.rs", "use std::net::TcpStream;\n").unwrap();
         let said = ": the interface holds no process or network code; the host does it through Services";
@@ -324,6 +327,7 @@ mod tests {
             interface_findings(&tree.path).unwrap(),
             vec![
                 format!("shell-api: lib.rs line 2: std::process::exit{said}"),
+                format!("er-ui: lib.rs line 1: std::net::UdpSocket{said}"),
                 format!("uml-ui: lib.rs line 1: std::process::Command{said}"),
                 format!("ui-egui: lib.rs line 2: std::net::Ipv4Addr{said}")
             ],
@@ -331,12 +335,13 @@ mod tests {
         );
     }
 
-    /// The shell, its interfaces and UML's screens have their rows on the layers the tickets give
-    /// them; the layer check itself fails on any library crate without a row.
+    /// The shell, its interfaces and the notations' screens have their rows on the layers the
+    /// tickets give them; the layer check itself fails on any library crate without a row.
     #[test]
     fn every_library_crate_of_the_repository_is_in_the_table() {
         assert_eq!(class_of(SHELL), Some(Class::Layer(11)));
         assert_eq!(class_of(SHELL_API), Some(Class::Layer(9)));
+        assert_eq!(class_of("er-ui"), Some(Class::Layer(10)));
         assert_eq!(class_of("uml-ui"), Some(Class::Layer(10)));
     }
 }

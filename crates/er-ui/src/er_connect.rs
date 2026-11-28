@@ -11,17 +11,17 @@
 use archforge_diagram::grid::bounds_of;
 use archforge_er::Cardinality;
 use archforge_er::figures::end_mark;
-use archforge_mof::{Obj, Store, Uuid};
+use archforge_mof::{Obj, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{View, end_glyph};
-use crate::cx::{Ctx, CtxRef};
 use crate::er_state::{er, er_mut};
-use crate::i18n::{fmt, tr};
-use crate::panels::control_cx;
 use crate::ux::{self, Palette, types};
-use crate::widgets;
+use archforge_shell_api::canvas::{View, end_glyph};
+use archforge_shell_api::cx::{Ctx, CtxRef};
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::control_cx;
+use archforge_shell_api::widgets;
 
 /// The popover's size and its rows.
 const POPOVER: Vec2 = vec2(330.0, 281.0);
@@ -69,9 +69,9 @@ pub struct MappingOffer {
 }
 
 /// Runs a command for a line being drawn or offered; a refusal comes back in plain words
-/// ([`crate::panels::refusal`]).
+/// ([`archforge_shell_api::panels::refusal`]).
 fn run(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    crate::panels::run_cx(cx, id, params)
+    archforge_shell_api::panels::run_cx(cx, id, params)
 }
 
 pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
@@ -84,7 +84,8 @@ pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
 }
 
 /// Whether a foreign key realises the relationship.
-pub fn has_foreign_key(store: &Store, rel: Obj) -> bool {
+#[cfg(feature = "snapshot")]
+pub fn has_foreign_key(store: &archforge_mof::Store, rel: Obj) -> bool {
     archforge_er::figures::has_foreign_key(store, rel)
 }
 
@@ -108,8 +109,8 @@ pub(crate) fn sample_line(
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
-    crate::canvas::end_glyph_on(paint, p, a, b, end_mark(from), stroke, z, false, fill);
-    crate::canvas::end_glyph_on(paint, p, b, a, end_mark(to), stroke, z, false, fill);
+    archforge_shell_api::canvas::end_glyph_on(paint, p, a, b, end_mark(from), stroke, z, false, fill);
+    archforge_shell_api::canvas::end_glyph_on(paint, p, b, a, end_mark(to), stroke, z, false, fill);
 }
 
 /// The relationship tool's icon: a line with the ends the tool draws, at the size the popover's
@@ -119,8 +120,8 @@ pub(crate) fn tool_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: 
     let (a, b) = (centre - vec2(24.0, 0.0), centre + vec2(24.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
-    crate::canvas::end_glyph_on(paint, p, a, b, end_mark(Some(from)), stroke, z, false, fill);
-    crate::canvas::end_glyph_on(paint, p, b, a, end_mark(Some(to)), stroke, z, false, fill);
+    archforge_shell_api::canvas::end_glyph_on(paint, p, a, b, end_mark(Some(from)), stroke, z, false, fill);
+    archforge_shell_api::canvas::end_glyph_on(paint, p, b, a, end_mark(Some(to)), stroke, z, false, fill);
 }
 
 /// The cardinality popover above the toolbar's Relationship chevron.
@@ -208,19 +209,19 @@ pub(crate) fn live_line(cx: &CtxRef, paint: &egui::Painter, p: &Palette, view: V
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), p.accent);
     let (start, end) = match target {
         Some(t) if t == rect => {
-            let points = crate::canvas::self_loop(rect, z);
+            let points = archforge_shell_api::canvas::self_loop(rect, z);
             paint.add(egui::Shape::line(points.clone(), stroke));
             (points[0], points[3])
         }
         Some(t) => {
-            let end = crate::canvas::exit_point(t, rect.center());
-            let start = crate::canvas::exit_point(rect, end);
-            crate::canvas::line(paint, &[start, end], stroke, kind.identifying, z);
+            let end = archforge_shell_api::canvas::exit_point(t, rect.center());
+            let start = archforge_shell_api::canvas::exit_point(rect, end);
+            archforge_shell_api::canvas::line(paint, &[start, end], stroke, kind.identifying, z);
             (start, end)
         }
         None => {
-            let start = crate::canvas::exit_point(rect, pointer);
-            crate::canvas::line(paint, &[start, pointer], stroke, kind.identifying, z);
+            let start = archforge_shell_api::canvas::exit_point(rect, pointer);
+            archforge_shell_api::canvas::line(paint, &[start, pointer], stroke, kind.identifying, z);
             (start, pointer)
         }
     };
@@ -235,7 +236,7 @@ pub(crate) fn live_line(cx: &CtxRef, paint: &egui::Painter, p: &Palette, view: V
 /// step; the foreign key comes along when the parent has a primary key and neither table is
 /// without columns (one still to be shaped is not given key columns unasked). Selects the
 /// relationship; a many-to-many one opens the mapping table offer.
-pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
+pub fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
     cx.canvas.notice = None;
     let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
     let Some(session) = cx.session.as_mut() else { return };
@@ -288,12 +289,12 @@ pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
                 cx.canvas.notice = Some(tr("Identifying needs the parent's primary key; drawn as not identifying"));
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
 /// Opens the mapping table offer for a many-to-many relationship, named after its two tables.
-pub(crate) fn offer_mapping(cx: &mut Ctx, relationship: Uuid) {
+pub fn offer_mapping(cx: &mut Ctx, relationship: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(rel) = store.by_uuid(relationship) else { return };
     let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
@@ -339,7 +340,8 @@ pub(crate) fn mapping_offer(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rec
     let field = Rect::from_min_size(at(16.0, 61.0), vec2(width, 28.0));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, cx.registry, "workspace.mapping.name", "field", field);
-    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
+    let inner =
+        archforge_shell_api::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
     if let Some(o) = er_mut(cx.notation_states).and_then(|er| er.mapping.as_mut()) {
         let edit = egui::TextEdit::singleline(&mut o.name)
             .id(widgets::egui_id("workspace.mapping.name"))
@@ -436,12 +438,16 @@ pub(crate) fn remove_selected_relationship(cx: &mut Ctx) -> bool {
     let Some(session) = cx.session.as_mut() else { return false };
     let removed = session
         .batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ()))
-        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e));
+        .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e));
     match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };
             let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            cx.canvas.toast = Some(archforge_shell_api::canvas::Toast {
+                text,
+                until: cx.frames.saturating_add(archforge_shell_api::canvas::TOAST_FRAMES),
+                undo_label,
+            });
         }
         Err(e) => cx.canvas.notice = Some(e),
     }
@@ -449,7 +455,7 @@ pub(crate) fn remove_selected_relationship(cx: &mut Ctx) -> bool {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Presets", "Start", "End"].into_iter()
 }

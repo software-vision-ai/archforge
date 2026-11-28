@@ -137,9 +137,9 @@ draws a screen (`testing::harness`).
 | `testing::TestContext` | feature `testing`: the test context a notation's screens are tested against without the shell (ADR 0005), every field public: what the narrow context borrows, owned for the notations given (`new(uis) -> Result<TestContext, Unregistered>`, each notation's state made and its catalogues registered), the problems a test sets, the inline editor the menu bar holds and every request made, kept in order and never carried out; `cx(f)` gives the narrow context over these parts, `cx_ref()` its read-only twin |
 | `testing::{harness, centre, click}` | feature `testing`: `pub fn harness<'a>(test: TestContext, language: &str, dark: bool, size: egui::Vec2, screen: impl FnMut(&mut Ctx<'_>, &mut egui::Ui, &Palette) + 'a) -> Result<Harness<'a, TestContext>, String>`: a screen drawn through the narrow context in an `egui_kittest` harness, in one language, pinned each frame, and one appearance with its palette, each frame counted and starting a frame of the automation registry, the design's families as the toolkit's faces; refused for a code no language has; the centre of a control the last frame drew, by automation id; a click there |
 
-**Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only ER
-draws until its screens crate takes them (UML's screens crate, `crates/uml-ui`, holds those only
-UML draws); the other crates' catalogues, which each crate that brings text keeps, embeds and
-registers (the shell's are in `crates/ui-egui/src/i18n/`, ER's in its `er/` folder until its
-screens crate takes them, UML's in `crates/uml-ui/src/i18n/uml/`); anything that
+**Non-goals.** Installing fonts and the app icon, which stay in the shell; the icons only one
+notation draws, which its screens crate holds (`crates/er-ui`, `crates/uml-ui`); the other crates'
+catalogues, which each crate that brings text keeps, embeds and registers (the shell's are in
+`crates/ui-egui/src/i18n/`, ER's in `crates/er-ui/src/i18n/er/`, UML's in
+`crates/uml-ui/src/i18n/uml/`); anything that
 touches the file system or the operating system, which the host does through `Services`.

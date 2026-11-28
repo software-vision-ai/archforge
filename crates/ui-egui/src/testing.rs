@@ -193,7 +193,7 @@ pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)> {
     }
     let mut all = vec![("home", crate::home::start_texts().collect())];
     all.extend(lists!(workspace, panels, chat_view, appearance, skill_tab, canvas));
-    all.extend(lists!(er_ui, er_kind, editing, connect, relation, er_table, keys, checks, indexes, types, subtypes, objects, settings_agents));
+    all.extend(lists!(editing, settings_agents));
     all
 }
 

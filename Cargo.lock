@@ -257,6 +257,7 @@ dependencies = [
  "archforge-dolt",
  "archforge-engine",
  "archforge-er",
+ "archforge-er-ui",
  "archforge-mcp",
  "archforge-mof",
  "archforge-notations",
@@ -372,6 +373,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "archforge-er-ui"
+version = "0.14.0"
+dependencies = [
+ "archforge-core",
+ "archforge-diagram",
+ "archforge-engine",
+ "archforge-er",
+ "archforge-mof",
+ "archforge-shell-api",
+ "egui",
+ "log",
+ "serde_json",
+]
+
+[[package]]
 name = "archforge-mcp"
 version = "0.14.0"
 dependencies = [
@@ -459,6 +475,7 @@ dependencies = [
  "archforge-diagram",
  "archforge-engine",
  "archforge-er",
+ "archforge-er-ui",
  "archforge-mof",
  "archforge-names",
  "archforge-notations",

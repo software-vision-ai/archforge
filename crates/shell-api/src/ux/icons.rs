@@ -2,10 +2,8 @@
 //! mark's A, the model thumbnail's links and the chevron. Each is a set of strokes in the box the
 //! design draws it in: `L` a straight segment, `C` a cubic curve with its two control points. The
 //! stroke is the design's weight; drawing an icon larger or smaller keeps it, as the design does.
-//! These are the icons the shell and both notations draw, and five only ER draws (its column,
-//! domain, enumeration, sequence and grip), which leave with it; any other icon only ER draws
-//! stays in the shell until ER's screens crate takes it, and the icons only UML draws are UML's
-//! screens crate's. Each icon carries its standard size, if it has one.
+//! These are the icons the shell and both notations draw; the icons only one notation draws are
+//! that notation's screens crate's. Each icon carries its standard size, if it has one.
 
 #![allow(clippy::approx_constant, reason = "path coordinates measured from the design; one that happens to be near 1/π is not that constant")]
 
@@ -137,63 +135,6 @@ pub const LINK: Icon = Icon {
     ],
 };
 
-/// A domain (the design's Icon / Domain): a typed box with a rule.
-pub const DOMAIN: Icon = Icon {
-    size: [11.0, 7.0],
-    stroke: 1.1,
-    standard_size: Some(11.0),
-    segments: &[
-        L([0.0, 0.0], [11.0, 0.0]),
-        L([11.0, 0.0], [11.0, 7.0]),
-        L([11.0, 7.0], [0.0, 7.0]),
-        L([0.0, 7.0], [0.0, 0.0]),
-        L([3.0, 3.5], [8.0, 3.5]),
-    ],
-};
-
-/// A column of a table in the Models tree: a field with its leading cell.
-pub const COLUMN: Icon = Icon {
-    size: [12.0, 8.0],
-    stroke: 1.2,
-    standard_size: Some(11.0),
-    segments: &[
-        L([0.0, 0.0], [12.0, 0.0]),
-        L([12.0, 0.0], [12.0, 8.0]),
-        L([12.0, 8.0], [0.0, 8.0]),
-        L([0.0, 8.0], [0.0, 0.0]),
-        L([4.0, 0.0], [4.0, 8.0]),
-    ],
-};
-
-/// A drag handle: two columns of three dots.
-pub const GRIP: Icon = Icon {
-    size: [4.0, 8.0],
-    stroke: 1.6,
-    standard_size: Some(8.0),
-    segments: &[
-        L([0.0, 0.0], [0.0, 0.0]),
-        L([4.0, 0.0], [4.0, 0.0]),
-        L([0.0, 4.0], [0.0, 4.0]),
-        L([4.0, 4.0], [4.0, 4.0]),
-        L([0.0, 8.0], [0.0, 8.0]),
-        L([4.0, 8.0], [4.0, 8.0]),
-    ],
-};
-
-/// A sequence (Icon / Sequence): lines of numbers and a plus.
-pub const SEQUENCE: Icon = Icon {
-    size: [10.0, 8.5],
-    stroke: 1.1,
-    standard_size: Some(10.0),
-    segments: &[
-        L([0.0, 0.0], [10.0, 0.0]),
-        L([0.0, 3.5], [10.0, 3.5]),
-        L([0.0, 7.0], [6.0, 7.0]),
-        L([8.5, 5.5], [8.5, 8.5]),
-        L([7.0, 7.0], [10.0, 7.0]),
-    ],
-};
-
 /// A view (Icon / View): an eye.
 pub const VIEW: Icon = Icon {
     size: [12.0, 9.0],
@@ -208,21 +149,6 @@ pub const VIEW: Icon = Icon {
         C([7.8, 4.5], [7.8, 5.494], [6.994, 6.3], [6.0, 6.3]),
         C([6.0, 6.3], [5.006, 6.3], [4.2, 5.494], [4.2, 4.5]),
         C([4.2, 4.5], [4.2, 3.506], [5.006, 2.7], [6.0, 2.7]),
-    ],
-};
-
-/// An enum type (Icon / Enum): three marked lines.
-pub const ENUM: Icon = Icon {
-    size: [9.5, 7.0],
-    stroke: 1.1,
-    standard_size: Some(9.5),
-    segments: &[
-        L([0.0, 0.0], [0.5, 0.0]),
-        L([3.0, 0.0], [9.5, 0.0]),
-        L([0.0, 3.5], [0.5, 3.5]),
-        L([3.0, 3.5], [9.5, 3.5]),
-        L([0.0, 7.0], [0.5, 7.0]),
-        L([3.0, 7.0], [9.5, 7.0]),
     ],
 };
 
@@ -1186,7 +1112,7 @@ mod tests {
     /// 14, and Restore, the versions' clock without its hands, none.
     #[test]
     fn every_icon_keeps_its_standard_size() {
-        let icons: [(&str, Icon, Option<f32>); 85] = [
+        let icons: [(&str, Icon, Option<f32>); 80] = [
             ("MARK_A", MARK_A, None),
             ("HOME", HOME, Some(15.0)),
             ("PLUS", PLUS, Some(10.0)),
@@ -1197,12 +1123,7 @@ mod tests {
             ("CHAT", CHAT, Some(16.0)),
             ("CLOSE", CLOSE, Some(9.0)),
             ("LINK", LINK, None),
-            ("DOMAIN", DOMAIN, Some(11.0)),
-            ("COLUMN", COLUMN, Some(11.0)),
-            ("GRIP", GRIP, Some(8.0)),
-            ("SEQUENCE", SEQUENCE, Some(10.0)),
             ("VIEW", VIEW, Some(12.0)),
-            ("ENUM", ENUM, Some(9.5)),
             ("ARROW", ARROW, Some(14.0)),
             ("SWAP", SWAP, None),
             ("MAP", MAP, Some(14.0)),

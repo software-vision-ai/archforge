@@ -45,8 +45,8 @@
 
 use archforge_engine::{GenerationRule, MappingRule, NotOneOf, Reason, SizeRule, WordPlace};
 
-use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::notation_ui::NotationUi;
+use archforge_shell_api::i18n::{fmt, tr, tr_ctx, trn};
+use archforge_shell_api::notation_ui::NotationUi;
 
 /// A kind of ER element as a refusal names it, with its article where the language has one, as
 /// `archforge_er`'s commands type it; none for another kind.
@@ -99,7 +99,7 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 
 /// An ER command's refusal in the user's words, a reason it holds (why a key, a column or a literal
 /// would break) said by the notations of `uis`; none for a reason or a kind this doesn't say.
-pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
+pub fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
     Some(match reason {
         Reason::IdEmpty { kind } => fmt(&tr("No id is given. Give the id of {what}."), &[("what", &a_kind(kind)?)]),
         Reason::NotA { kind, name } => fmt(&tr("{name} is not {what}."), &[("name", name), ("what", &a_kind(kind)?)]),
@@ -146,10 +146,10 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
             fmt(&tr("An identifying relationship's foreign key columns are part of the primary key, and {column} is not."), &[("column", column)])
         }
         Reason::WouldBreak { kind: "primary key" | "unique constraint", name, why } => {
-            fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(uis, why)?)])
+            fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &archforge_shell_api::panels::said(uis, why)?)])
         }
         Reason::WouldBreak { kind: "foreign key", name, why } => {
-            fmt(&tr("The foreign key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(uis, why)?)])
+            fmt(&tr("The foreign key {name} would break: {why}"), &[("name", name), ("why", &archforge_shell_api::panels::said(uis, why)?)])
         }
         Reason::TooDeep { kind: "key", max } => {
             fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
@@ -158,10 +158,10 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
         Reason::SubtypeKeyPart => tr("This is part of a subtype's key, which goes only with its subtype."),
         Reason::Mapping(rule) => mapping_said(rule),
         Reason::WouldBreak { kind: "column", name, why } => {
-            fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(uis, why)?)])
+            fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &archforge_shell_api::panels::said(uis, why)?)])
         }
         Reason::WouldBreak { kind: "table", name, why } => {
-            fmt(&tr("The table {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(uis, why)?)])
+            fmt(&tr("The table {name} would break: {why}"), &[("name", name), ("why", &archforge_shell_api::panels::said(uis, why)?)])
         }
         Reason::Sequence(rule) => sequence_said(rule),
         Reason::ColumnOfOtherSchema { column } => {
@@ -213,7 +213,7 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
         Reason::TooMany { kind: LITERAL, max } => fmt(&tr("An enum type has at most {max} literals."), &[("max", &max.to_string())]),
         Reason::LiteralName { name, .. } if name.is_empty() => tr("A literal can't be empty."),
         Reason::LiteralName { name, why } => {
-            fmt(&tr("The literal \"{name}\" is not a valid name. {why}"), &[("name", name), ("why", &crate::panels::said(uis, why)?)])
+            fmt(&tr("The literal \"{name}\" is not a valid name. {why}"), &[("name", name), ("why", &archforge_shell_api::panels::said(uis, why)?)])
         }
         Reason::NamedTwice { kind: LITERAL, name } => fmt(&tr("The literal \"{name}\" is given twice. Give each literal once."), &[("name", name)]),
         _ => return None,

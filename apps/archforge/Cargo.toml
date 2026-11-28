@@ -18,6 +18,8 @@ archforge-agents.workspace = true
 archforge-control.workspace = true
 archforge-dolt.workspace = true
 archforge-engine.workspace = true
+# ER's screens part, which the app registers with every shell it makes.
+archforge-er-ui.workspace = true
 archforge-notations.workspace = true
 archforge-mof.workspace = true
 archforge-project.workspace = true
@@ -50,6 +52,9 @@ archforge-uml.workspace = true
 # The words the shell hands its lookups through a table, for the tests across every catalogue, and
 # what UML's window tests (`tests/uml_window`) reach in the shell.
 archforge-ui-egui = { workspace = true, features = ["snapshot", "testing"] }
+# The words ER's screens hand their lookups through a table, for the tests across every catalogue,
+# and what the app's tests reach in ER's screens.
+archforge-er-ui = { workspace = true, features = ["snapshot"] }
 # The words UML's screens hand their lookups through a table, for the tests across every catalogue.
 archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 craft-testkit.workspace = true

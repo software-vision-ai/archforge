@@ -3,10 +3,12 @@
 
 mod versions;
 
-use crate::er_state::er_mut;
 use crate::snapshot;
 use crate::theme::ThemeKind;
 use crate::{Folder, Services, Shell};
+// ER's screens' modules, as their crate's `snapshot` lists them for the tool.
+use archforge_er_ui::snapshot::er_state::er_mut;
+use archforge_er_ui::snapshot::{er_indexes, er_keys, er_place, er_table};
 // UML's screens' modules, as their crate's `snapshot` lists them for the tool.
 use archforge_uml_ui::snapshot::uml_state::{menus, uml_mut};
 use archforge_uml_ui::snapshot::{
@@ -607,7 +609,8 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 }
 
 /// The screens parts the screens' shells are given: ER's, then UML's, as the app registers them.
-static PARTS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, archforge_uml_ui::UML]);
+static PARTS: archforge_shell_api::screens::ScreensRegistry =
+    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER, archforge_uml_ui::UML]);
 
 /// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
 /// control the pointer rests on, if any.
@@ -749,7 +752,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             if let Some((column, entity)) = email
                 && let Ok(entity) = store.uuid(entity)
             {
-                snapshot::cx(&mut shell, |cx| crate::er_table::open_column(cx, entity, Some(column)));
+                snapshot::cx(&mut shell, |cx| er_table::open_column(cx, entity, Some(column)));
                 if let Some(c) = er_mut(snapshot::notation_states(&mut shell)).and_then(|er| er.column.as_mut()) {
                     c.more = true;
                 }
@@ -762,9 +765,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             let customer = store.alive().find(|o| archforge_core::name_of(store, *o) == "Customer");
             if let Some(e) = customer
                 && let Ok(entity) = store.uuid(e)
-                && let Some(index) = crate::indexes::rows(store, e).into_iter().next()
+                && let Some(index) = er_indexes::rows(store, e).into_iter().next()
             {
-                snapshot::cx(&mut shell, |cx| crate::indexes::open(cx, entity, Some(&index)));
+                snapshot::cx(&mut shell, |cx| er_indexes::open(cx, entity, Some(&index)));
                 if let Some(i) = er_mut(snapshot::notation_states(&mut shell)).and_then(|er| er.index.as_mut()) {
                     i.more = true;
                 }
@@ -777,9 +780,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             let customer = store.alive().find(|o| archforge_core::name_of(store, *o) == "Customer");
             if let Some(e) = customer
                 && let Ok(entity) = store.uuid(e)
-                && let Some(unique) = crate::keys::rows(store, e).into_iter().find(|k| !k.primary)
+                && let Some(unique) = er_keys::rows(store, e).into_iter().find(|k| !k.primary)
             {
-                snapshot::cx(&mut shell, |cx| crate::keys::open(cx, entity, Some(&unique)));
+                snapshot::cx(&mut shell, |cx| er_keys::open(cx, entity, Some(&unique)));
             }
         }
     }
@@ -1372,7 +1375,7 @@ fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
     run(
         session,
         "diagram.place",
-        json!({ "diagram": diagram, "element": company, "x": 160, "y": 180, "width": 240, "height": crate::er_place::content_height(1) }),
+        json!({ "diagram": diagram, "element": company, "x": 160, "y": 180, "width": 240, "height": er_place::content_height(1) }),
     )?;
     let d = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
     crate::canvas::open(shell, d);
@@ -1475,7 +1478,7 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     let a = run(
         session,
         "diagram.place",
-        json!({ "diagram": diagram, "element": account, "x": 560, "y": 680, "width": 240, "height": crate::er_place::content_height(1) }),
+        json!({ "diagram": diagram, "element": account, "x": 560, "y": 680, "width": 240, "height": er_place::content_height(1) }),
     )?;
     let edge = run(session, "diagram.connect", json!({ "diagram": diagram, "element": owns, "source": a, "target": order_node }))?;
     run(session, "diagram.label", json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
@@ -2937,7 +2940,7 @@ fn sample_routing(shell: &mut Shell) -> Result<(), String> {
         let n = run(
             session,
             "diagram.place",
-            json!({ "diagram": diagram, "element": table, "x": x, "y": y, "width": 240, "height": crate::er_place::content_height(2) }),
+            json!({ "diagram": diagram, "element": table, "x": x, "y": y, "width": 240, "height": er_place::content_height(2) }),
         )?;
         run(session, "diagram.connect", json!({ "diagram": diagram, "element": r, "source": customer_node, "target": n }))?;
     }
@@ -3071,7 +3074,7 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
             let entity = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
             b.execute(
                 "diagram.place",
-                &json!({ "diagram": diagram_id.to_string(), "element": entity, "x": 200, "y": 360, "width": crate::er_place::ENTITY_WIDTH, "height": crate::er_place::ENTITY_EMPTY_HEIGHT }),
+                &json!({ "diagram": diagram_id.to_string(), "element": entity, "x": 200, "y": 360, "width": er_place::ENTITY_WIDTH, "height": er_place::ENTITY_EMPTY_HEIGHT }),
             )?;
             Ok(())
         })

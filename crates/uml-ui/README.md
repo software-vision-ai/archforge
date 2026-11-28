@@ -42,5 +42,5 @@ it as it scans the shell).
 | `snapshot::word_lists` | feature `snapshot`: `pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)>`: every word a module hands `tr` through a table rather than as a literal, each list with the name of its module (`src/<name>.rs`), for the app's tests across every catalogue |
 
 **Non-goals.** The shell's own screens, panels and canvas, which UML's screens are drawn inside;
-ER's screens; the catalogues of the shell and of its interfaces; anything that touches the file
+ER's screens (`archforge-er-ui`); the catalogues of the shell and of its interfaces; anything that touches the file
 system or the operating system, which the host does through `Services`.

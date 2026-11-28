@@ -1,13 +1,12 @@
 //! The shell's translations, under the shell's old path: the machinery (the lookups, the
 //! languages and their plural rules, `parse`) comes from the shell's interfaces
 //! (`archforge_shell_api::i18n`), so a notation's screens translate with it without the shell.
-//! What stays here is the catalogues, one per language: the shell's own, `i18n/<code>.tsv`, and
-//! ER's, `i18n/er/<code>.tsv`, until its screens crate takes them, which ER hands over
-//! ([`NotationUi::catalogues`](crate::notation_ui::NotationUi::catalogues)), as UML's screens crate
-//! hands over UML's. They are embedded; the
+//! What stays here is the shell's own catalogues, one per language, `i18n/<code>.tsv`; each
+//! notation's screens crate hands over its own
+//! ([`NotationUi::catalogues`](crate::notation_ui::NotationUi::catalogues)). They are embedded; the
 //! shell's own is registered with the machinery before the first lookup through this module
 //! ([`registered`]), and a shell registers those of the notations it is given as it sets them up
-//! ([`register_notations`]); the build script refuses a malformed row in any of them with the
+//! ([`register_notations`]); the build script refuses a malformed row in the shell's with the
 //! machinery's row check. Each row has four columns: kind (`str` or `plural`), context, key, text,
 //! as the machinery describes them. A row only one notation's screens name is in that notation's
 //! catalogue, and a row only the shell's interfaces' code says is in theirs
