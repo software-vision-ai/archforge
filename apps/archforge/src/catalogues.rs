@@ -739,3 +739,77 @@ fn model_words_are_said_for_the_core_and_the_notations_given() {
     assert_eq!(property_label(&[], &universe, archforge_core::link::KIND), Some(german("Kind")));
     set_language("en");
 }
+
+/// Every class a notation creates by constant name is one of the kinds, each of them concrete and
+/// of the model area.
+#[test]
+fn every_class_the_notations_create_has_a_kind_word() {
+    let universe = archforge_notations::NOTATIONS.universe().unwrap();
+    let word = |constant: &str| {
+        let mut parts = constant.split('_').map(|p| p.to_lowercase());
+        let first = parts.next().unwrap_or_default();
+        std::iter::once(first[..1].to_uppercase() + &first[1..]).chain(parts).collect::<Vec<_>>().join(" ")
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files = Vec::new();
+    for dir in ["crates/uml/src", "crates/er/src", "crates/core/src"] {
+        sources(&root.join(dir), &mut files);
+    }
+    let mut created = std::collections::BTreeSet::new();
+    for file in &files {
+        let text = std::fs::read_to_string(file).unwrap();
+        for (at, _) in text.match_indices(".create(") {
+            let argument: String = text[at + ".create(".len()..].chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':').collect();
+            let constant = argument.rsplit("::").next().unwrap_or_default();
+            if !constant.is_empty() && constant.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+                created.insert(word(constant));
+            }
+        }
+    }
+    assert!(created.contains("Interface realization"), "the scan found {created:?}; the scanner is broken");
+    let kinds: Vec<String> = archforge_ui_egui::testing::kind_classes(crate::SCREENS.notation_uis())
+        .iter()
+        .map(|c| archforge_ui_egui::model_words::words(&universe.class(*c).unwrap().name))
+        .collect();
+    // What a notation draws is the diagram metamodel's: boxes, lines and their labels. A package's
+    // default-diagram binding is the diagram metamodel's too, worded Default diagram on its own (AR-553).
+    for class in created.iter().filter(|c| !["Node", "Edge", "Label", "Default diagram binding"].contains(&c.as_str())) {
+        assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to its notation's created_classes");
+    }
+    for class in &archforge_ui_egui::testing::kind_classes(crate::SCREENS.notation_uis()) {
+        let known = universe.class(*class).unwrap();
+        assert!(!known.is_abstract && class.metamodel() != archforge_diagram::INDEX, "{} cannot be an element's kind", known.name);
+    }
+}
+
+/// Every reason a command gives for not being available, in a project without a model root and in
+/// a new project that holds only its root, has a catalogue row keyed by that reason: said in
+/// English, it is the reason itself (AR-440).
+#[test]
+fn every_reason_a_command_is_not_available_has_its_row() {
+    let ids = || {
+        let mut n: u128 = 0;
+        Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        })
+    };
+    let options = archforge_engine::Options::default();
+    let rootless = archforge_notations::NOTATIONS.store(ids()).unwrap();
+    let rootless =
+        archforge_engine::Session::with_view(archforge_notations::NOTATIONS.registry().unwrap(), rootless, 1, options, archforge_notations::NOTATIONS.view());
+    let new = archforge_notations::NOTATIONS.new_project_session("Shop", ids()).unwrap();
+    set_language("en");
+    let mut reasons = std::collections::BTreeSet::new();
+    for session in [&rootless, &new] {
+        reasons.extend(session.registry().infos(&session.facts()).into_iter().filter_map(|i| i.disabled_reason));
+    }
+    for reason in &reasons {
+        assert_eq!(
+            archforge_shell_api::engine_said::disabled(crate::SCREENS.notation_uis(), reason).as_deref(),
+            Some(*reason),
+            "no row keyed by {reason:?}"
+        );
+    }
+    assert_eq!(reasons.len(), 26, "the reasons found: {reasons:?}");
+}

@@ -665,7 +665,7 @@ fn new_branch_keeps_the_keys_and_its_answer_to_itself() {
     in_both_appearances(|theme| {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -1043,7 +1043,7 @@ fn delete_branch_keeps_the_keys_to_itself() {
         for up in [true, false] {
             let (mut h, host) = saving_harness(Some(commerce()), None);
             (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
-            crate::explorer::add(h.state_mut(), "schema");
+            crate::explorer::add(h.state_mut(), "package");
             h.run();
             key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
             let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);

@@ -105,6 +105,11 @@ pub fn model_menus(kinds: &[&'static dyn DiagramKind]) -> Vec<Vec<&'static str>>
     crate::model_menu::every_menu(kinds)
 }
 
+/// The classes that get a kind word of their own among the notations `uis`: those each creates.
+pub fn kind_classes(uis: &[&'static dyn NotationUi]) -> Vec<archforge_mof::ClassId> {
+    crate::model_words::kinds(uis)
+}
+
 /// The inline editor the bar holds the keyboard for, if any.
 pub fn menu_held(shell: &Shell) -> Option<egui::Id> {
     shell.menu_bar.held

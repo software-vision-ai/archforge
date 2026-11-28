@@ -5561,10 +5561,10 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     let at = rect_of(&h, "workspace.explorer.add").center();
     click(&mut h, at);
     assert!(h.state().explorer.menu_open);
-    let at = rect_of(&h, "workspace.explorer.add.schema").center();
+    let at = rect_of(&h, "workspace.explorer.add.package").center();
     click(&mut h, at);
     h.run();
-    assert_eq!(schema_names(&h), ["Schema 1"]);
+    assert_eq!(schema_names(&h), ["Package 1"]);
     assert!(h.state().explorer.rename.is_some(), "the new schema's name is open for typing");
     assert!(ids(&h).iter().any(|i| i == "workspace.explorer.rename"));
     assert!(h.state().session.as_ref().unwrap().is_dirty());
@@ -5578,7 +5578,7 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     assert!(ids(&h).iter().any(|i| i.starts_with("workspace.explorer.row.")), "the schema has a row");
     // Undo takes the rename back, redo the other way.
     key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(schema_names(&h), ["Schema 1"]);
+    assert_eq!(schema_names(&h), ["Package 1"]);
     key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
     assert_eq!(schema_names(&h), ["Shop"]);
 }
@@ -5593,7 +5593,7 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         for then in ["escape", "correct", "click"] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-            crate::explorer::add(h.state_mut(), "schema");
+            crate::explorer::add(h.state_mut(), "package");
             h.run();
             // The default name is selected whole: Backspace empties it, and Enter is refused.
             key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
@@ -5618,10 +5618,10 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
             } else {
                 key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
                 assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes it: {:?}", h.state().explorer.rename);
-                assert_eq!(schema_names(&h), ["Schema 1"], "{theme:?}: the old name stays");
+                assert_eq!(schema_names(&h), ["Package 1"], "{theme:?}: the old name stays");
                 // The tree has its keys again: F2 opens the selected schema's name.
                 key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
-                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Schema 1"), "{theme:?}: F2 reaches the tree");
+                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Package 1"), "{theme:?}: F2 reaches the tree");
             }
         }
     }
@@ -5635,7 +5635,7 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -6509,12 +6509,12 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
-    crate::explorer::add(h.state_mut(), "schema");
+    crate::explorer::add(h.state_mut(), "package");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(h.state().explorer.rename.is_none());
     // The new schema is selected: + offers a table first.
-    crate::explorer::add(h.state_mut(), "table");
+    crate::explorer::add(h.state_mut(), "class");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -6553,12 +6553,12 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     for _ in 0..2 {
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
     }
-    crate::explorer::add(h.state_mut(), "schema");
+    crate::explorer::add(h.state_mut(), "package");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert_eq!(schema_names(&h).len(), 3);
@@ -8676,7 +8676,7 @@ fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String)
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let (d, a, b, e) = {
         let s = h.state_mut().session.as_mut().unwrap();
-        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
         let pkg = run("sketch.package.add", serde_json::json!({ "name": "sales" }));
         let party = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Party" }));
         run("sketch.attribute.add", serde_json::json!({ "class": party, "name": "partyId" }));
@@ -11015,6 +11015,16 @@ fn sketch_packages(store: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
     store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).collect()
 }
 
+/// The package `selection` is, or the one the class `selection` sits in.
+fn sketch_package_of(store: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Option<archforge_mof::Obj> {
+    let o = selection?;
+    match store.class_of(o).ok()? {
+        c if c == archforge_mof::toy::PACKAGE => Some(o),
+        c if c == archforge_mof::toy::CLASS => store.container(o).ok().flatten().map(|(p, _)| p),
+        _ => None,
+    }
+}
+
 /// The classes of the fake notation's package `pkg`.
 fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
     store
@@ -11053,55 +11063,100 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn is_top(&self, store: &archforge_mof::Store, member: archforge_mof::Obj) -> bool {
         store.class_of(member).ok() == Some(archforge_mof::toy::PACKAGE)
     }
+    /// The package, its classes under it and each class's attributes under the class; a filter
+    /// keeps the rows whose names hold it and the rows they sit under.
     fn tree(&self, store: &archforge_mof::Store, pkg: archforge_mof::Obj, t: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
-        let classes = sketch_classes(store, pkg);
-        let under: Vec<crate::explorer::Row> = classes
-            .iter()
-            .filter_map(|c| {
-                let label = archforge_core::name_of(store, *c);
-                if t.matches(&label) { t.row(*c, 1, "class", &crate::ux::icons::TABLE, label) } else { None }
-            })
-            .collect();
-        let expandable = !under.is_empty();
-        let expanded = expandable && t.open(pkg);
-        let mut out: Vec<crate::explorer::Row> = t
-            .row(pkg, 0, "package", &crate::ux::icons::SCHEMA, archforge_core::name_of(store, pkg))
-            .map(|r| crate::explorer::Row { expandable, expanded, ..r })
-            .into_iter()
-            .collect();
-        if expanded {
-            out.extend(under);
+        let mut under = Vec::new();
+        for c in sketch_classes(store, pkg) {
+            let label = archforge_core::name_of(store, c);
+            let attributes: Vec<archforge_mof::Obj> =
+                store.list(c, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE).unwrap_or_default().iter().filter_map(archforge_mof::Value::as_ref).collect();
+            let rows: Vec<crate::explorer::Row> = attributes
+                .iter()
+                .filter_map(|a| {
+                    let name = archforge_core::name_of(store, *a);
+                    if t.matches(&name) { t.row(*a, 2, "attribute", &crate::ux::icons::LIST, name).map(|r| crate::explorer::Row { muted: true, ..r }) } else { None }
+                })
+                .collect();
+            let expandable = if t.filtering() { !rows.is_empty() } else { !attributes.is_empty() };
+            if t.matches(&label) || !rows.is_empty() {
+                let expanded = expandable && t.open(c);
+                under.extend(t.row(c, 1, "class", &crate::ux::icons::TABLE, label).map(|r| crate::explorer::Row { expandable, expanded, draggable: true, ..r }));
+                if expanded {
+                    under.extend(rows);
+                }
+            }
+        }
+        let label = archforge_core::name_of(store, pkg);
+        let expandable = if t.filtering() { !under.is_empty() } else { !sketch_classes(store, pkg).is_empty() };
+        let mut out = Vec::new();
+        if t.matches(&label) || !under.is_empty() {
+            let expanded = expandable && t.open(pkg);
+            out.extend(t.row(pkg, 0, "package", &crate::ux::icons::SCHEMA, label).map(|r| crate::explorer::Row { expandable, expanded, ..r }));
+            if expanded {
+                out.extend(under);
+            }
         }
         out
     }
-    /// Nothing for Models' `+`.
-    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
-        Vec::new()
+    /// A package for Models' `+`, and a class beside it once a package or a class is selected.
+    fn offers(&self, store: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        let offer = |key, word: &str| crate::notation_ui::Offer { key, word: word.into() };
+        match sketch_package_of(store, selection) {
+            Some(_) => vec![offer("class", "Class"), offer("package", "Package")],
+            None => vec![offer("package", "Package")],
+        }
     }
-    /// Adds nothing, as it offers nothing.
-    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
-        None
+    /// A package named `Package 1` or the next free number, or a class of the selection's package
+    /// named so, through the fake notation's commands.
+    fn add(&self, cx: &mut crate::cx::Ctx, key: &str, sel: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+        let store = cx.session.as_ref()?.doc();
+        let names = |list: Vec<archforge_mof::Obj>| list.into_iter().map(|o| archforge_core::name_of(store, o)).collect::<Vec<_>>();
+        let (out, parents) = match key {
+            "package" => {
+                let name = archforge_shell_api::explorer::fresh_name("Package", names(sketch_packages(store)).into_iter(), false)?;
+                (archforge_shell_api::panels::run_cx(cx, "sketch.package.add", serde_json::json!({ "name": name })), Vec::new())
+            }
+            "class" => {
+                let package = sketch_package_of(store, sel)?;
+                let name = archforge_shell_api::explorer::fresh_name("Class", names(sketch_classes(store, package)).into_iter(), false)?;
+                let id = store.uuid(package).ok()?;
+                (archforge_shell_api::panels::run_cx(cx, "sketch.class.add", serde_json::json!({ "package": id.to_string(), "name": name })), vec![id])
+            }
+            _ => return None,
+        };
+        Some(out.and_then(|v| archforge_mof::Uuid::parse(v["id"].as_str().unwrap_or_default()).ok_or_else(|| "no id".to_string())).map(|id| crate::notation_ui::Added { id, parents }))
     }
-    /// None: the sketch renames nothing in place.
-    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
-        None
+    /// A package's or a class's name, through its own rename command.
+    fn rename(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        match store.class_of(obj).ok()? {
+            c if c == archforge_mof::toy::PACKAGE => Some(("sketch.package.rename", "package")),
+            c if c == archforge_mof::toy::CLASS => Some(("sketch.class.rename", "class")),
+            _ => None,
+        }
     }
     /// Its one rename that may empty a name, which no other notation knows, so a test sees it asked.
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == SKETCH_UNNAMED
     }
-    /// The package, the one row that opens.
-    fn foldable(&self, _: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        vec![pkg]
+    /// The package and its classes, the rows that open.
+    fn foldable(&self, store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        std::iter::once(pkg).chain(sketch_classes(store, pkg)).collect()
     }
-    /// The package a class sits in.
+    /// What an element sits in: an attribute's class and its package, a class's package.
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
+        std::iter::successors(store.container(o).ok().flatten().map(|(c, _)| c), |c| store.container(*c).ok().flatten().map(|(p, _)| p))
+            .filter(|c| store.class_of(*c).ok() != Some(archforge_core::MODEL))
+            .collect()
     }
     /// None, but for the sketch named `second`: a row of its own, so a test tells two sketches'
     /// tables apart. Only a shell given the sketches' screens parts registers it.
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
-        if self.0 == "second" { SECOND_SKETCH_ROWS } else { &[] }
+        match self.0 {
+            "sketch" => SKETCH_CATALOGUE,
+            "second" => SECOND_SKETCH_ROWS,
+            _ => &[],
+        }
     }
     /// The class, the one kind it makes.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
@@ -11388,6 +11443,19 @@ impl crate::notation_ui::NotationUi for WordsUi {
 
 /// The worded notation before the sketch.
 static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &SketchUi("sketch")];
+
+/// The sketch notation's catalogue table, one catalogue for each language in the languages' order
+/// with its one row, so the shell's tests see a notation's table registered and looked up beside
+/// the shell's own.
+static SKETCH_CATALOGUE: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "sketch.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\nstr\t\tSketch\tSketch\n" },
+    crate::i18n::Rows { code: "de", catalogue: "sketch-de.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tSkizze\n" },
+    crate::i18n::Rows { code: "es", catalogue: "sketch-es.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tBoceto\n" },
+    crate::i18n::Rows { code: "fr", catalogue: "sketch-fr.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tCroquis\n" },
+    crate::i18n::Rows { code: "pt-PT", catalogue: "sketch-pt-PT.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tEsboço\n" },
+    crate::i18n::Rows { code: "ja", catalogue: "sketch-ja.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tスケッチ\n" },
+    crate::i18n::Rows { code: "zh-Hans", catalogue: "sketch-zh-Hans.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\t草图\n" },
+];
 
 /// The second sketch's catalogue, a row only it says, in English and in German.
 static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
@@ -16254,7 +16322,7 @@ fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
 fn new_project_over_the_workspace_keeps_the_keys_from_it() {
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -16280,10 +16348,10 @@ fn new_project_over_the_workspace_keeps_the_keys_from_it() {
 #[test]
 fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behind_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
-    crate::explorer::add(h.state_mut(), "schema");
+    crate::explorer::add(h.state_mut(), "package");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    crate::explorer::add(h.state_mut(), "table");
+    crate::explorer::add(h.state_mut(), "class");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // The table, childless, selected in Models with the explorer holding the keys.
@@ -16338,7 +16406,7 @@ fn shift_f10_opens_the_models_row_menu_only_with_shift_alone() {
     use egui::Modifiers as M;
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, M::NONE);
         // The new schema stays selected; a click on it would name it in place.
