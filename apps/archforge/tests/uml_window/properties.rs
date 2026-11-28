@@ -58,7 +58,7 @@ fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
     in_both_appearances(|theme| {
         let (mut h, order, _) = order_properties(theme);
         for i in 0..16 {
-            archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") }))
+            archforge_ui_egui::testing::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") }))
                 .unwrap();
         }
         h.run();
@@ -86,14 +86,14 @@ fn an_end_editor_moved_to_another_end_comes_into_view() {
         let (mut h, ids) = nary_sample_in(theme, true, egui::vec2(1600.0, 1000.0));
         let a = ids["recommends"].clone();
         for _ in 0..24 {
-            archforge_ui_egui::snapshot::run(
+            archforge_ui_egui::testing::run(
                 h.state_mut(),
                 "uml.association.add-end",
                 serde_json::json!({ "association": a, "class": ids["Customer"] }),
             )
             .unwrap();
         }
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [a] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [a] })).unwrap();
         h.run();
         let st = h.state().session.as_ref().unwrap().doc();
         let last = archforge_uml::nary::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap()).len() - 1;
@@ -119,7 +119,7 @@ fn a_member_editor_moved_to_another_list_comes_into_view() {
     in_both_appearances(|theme| {
         let (mut h, order, _) = order_properties(theme);
         for i in 0..16 {
-            archforge_ui_egui::snapshot::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": format!("run{i}") }))
+            archforge_ui_egui::testing::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": format!("run{i}") }))
                 .unwrap();
         }
         h.run();
@@ -141,13 +141,13 @@ fn a_refused_card_taller_than_the_body_shows_its_foot() {
     in_both_appearances(|theme| {
         let (mut h, order, _) = order_properties(theme);
         let params: Vec<_> = (0..30).map(|i| serde_json::json!({ "name": format!("p{i}"), "type": "" })).collect();
-        let op = archforge_ui_egui::snapshot::run(
+        let op = archforge_ui_egui::testing::run(
             h.state_mut(),
             "uml.operation.add",
             serde_json::json!({ "class": order, "name": "plan", "parameters": params }),
         );
         let op = op.unwrap()["id"].as_str().unwrap().to_string();
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
         h.run();
         let at = reached_in_properties(&mut h, &format!("workspace.properties.operation.{op}.edit"));
         click(&mut h, at);
@@ -171,7 +171,7 @@ fn a_refused_attribute_keeps_its_buttons_in_view() {
     in_both_appearances(|theme| {
         let (mut h, order, _) = order_properties(theme);
         for i in 0..16 {
-            archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") }))
+            archforge_ui_egui::testing::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") }))
                 .unwrap();
         }
         h.run();
@@ -199,7 +199,7 @@ fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_
     use serde_json::json;
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
-        archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
     };
     let sales = id(&mut h, "uml.package.add", json!({ "name": "Sales" }));
     let status = id(&mut h, "uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
@@ -207,12 +207,12 @@ fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_
     let status = archforge_mof::Uuid::parse(&status).unwrap();
     let read = |h: &mut Harness<'static, Shell>| {
         let s = h.state_mut();
-        let choices = archforge_ui_egui::snapshot::cx(s, |cx| uml_panel::choices_for_menu(cx, None));
+        let choices = archforge_ui_egui::testing::cx(s, |cx| uml_panel::choices_for_menu(cx, None));
         let invoice = choices.labels.iter().any(|l| l == "Invoice");
-        archforge_ui_egui::snapshot::cx(s, |cx| uml_panel::keep_choices(cx, choices));
-        let targets = archforge_ui_egui::snapshot::cx(s, |cx| uml_panel::take_targets(cx, "status", |_| None, |st| st.by_uuid(status)));
+        archforge_ui_egui::testing::cx(s, |cx| uml_panel::keep_choices(cx, choices));
+        let targets = archforge_ui_egui::testing::cx(s, |cx| uml_panel::take_targets(cx, "status", |_| None, |st| st.by_uuid(status)));
         let literals = targets.literals.clone().unwrap_or_default();
-        archforge_ui_egui::snapshot::cx(s, |cx| uml_panel::keep_targets(cx, targets));
+        archforge_ui_egui::testing::cx(s, |cx| uml_panel::keep_targets(cx, targets));
         (invoice, literals)
     };
     let first = archforge_ui_egui::testing::build_session(h.state(), &rows_now(&h)).unwrap();
@@ -555,7 +555,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let authorise = member(&h, "Payment", "authorise", true);
         select(&mut h, payment_id);
         let authorise_id = uuid(&h, authorise);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, payment_id, MemberKind::Operation, Some(authorise_id)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, payment_id, MemberKind::Operation, Some(authorise_id)));
         h.run();
         // The editor's own box, beside the classifier's: the one its explanation describes.
         let member_node = |h: &Harness<'static, Shell>| {
@@ -592,7 +592,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
             h.state_mut().session.as_mut().unwrap().execute("uml.attribute.add", &params).unwrap().value["id"].as_str().unwrap().to_string();
         let card_amount = archforge_mof::Uuid::parse(&card_amount).unwrap();
         select(&mut h, payment_id);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, payment_id, MemberKind::Attribute, Some(amount_id)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, payment_id, MemberKind::Attribute, Some(amount_id)));
         h.run();
         let before = revision(&h);
         let at = rect_of(&h, MEMBER_LEAF_ID).center();
@@ -613,7 +613,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let leaf = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": true });
         h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &leaf).unwrap();
         select(&mut h, card_id);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.redefines").center();
         click(&mut h, at);
@@ -631,7 +631,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         uml_of_mut(h.state_mut()).member = None;
         let clear = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": false });
         h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &clear).unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.redefines").center();
         click(&mut h, at);
@@ -681,7 +681,7 @@ fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
         }
         assert!(found.iter().any(|i| i == "workspace.properties.literals.add"), "a + for literals: {found:?}");
         // With literals: each a row in their order; a click selects it and the panel stays.
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, priority, &["Low", "Normal", "High"])).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, priority, &["Low", "Normal", "High"])).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority.to_string()] })).unwrap();
         h.run();
         let literals = {
@@ -1319,7 +1319,7 @@ fn a_new_nested_classifier_takes_a_name_free_of_its_owners_members() {
         .unwrap()
         .execute("uml.attribute.add", &serde_json::json!({ "class": order.to_string(), "name": "enumeration 1" }))
         .unwrap();
-    let made = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_nesting::add_nested(cx, order, uml_classifier::Classifier::Enumeration))
+    let made = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_nesting::add_nested(cx, order, uml_classifier::Classifier::Enumeration))
         .expect("made");
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::name_of(st, st.by_uuid(made).unwrap()), "Enumeration 2", "the next name the owner leaves free");
@@ -1381,9 +1381,9 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         // In the sample model OrderRepository binds Repository: Key's removal is refused, naming
         // the binding (C5).
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
         h.run();
-        let (sample_id, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_repository(cx, true)).unwrap_or_else(|e| panic!("{e}"));
+        let (sample_id, _) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_repository(cx, true)).unwrap_or_else(|e| panic!("{e}"));
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
         let rows_before = signature_of(&h, &sample_id.to_string());

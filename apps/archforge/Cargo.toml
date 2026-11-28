@@ -20,7 +20,6 @@ snapshot = [
     "dep:archforge-uml",
     "dep:egui_kittest",
     "dep:png",
-    "archforge-ui-egui/snapshot",
     "archforge-ui-egui/testing",
     "archforge-er-ui/snapshot",
     "archforge-uml-ui/snapshot",
@@ -86,7 +85,7 @@ archforge-uml.workspace = true
 # The words the shell hands its lookups through a table, for the tests across every catalogue, and
 # what ER's and UML's window tests (`tests/er_window`, `tests/uml_window`) and the screenshot
 # tool's own tests reach in the shell.
-archforge-ui-egui = { workspace = true, features = ["snapshot", "testing"] }
+archforge-ui-egui = { workspace = true, features = ["testing"] }
 # The words ER's screens hand their lookups through a table, for the tests across every catalogue,
 # and what the app's tests and the screenshot tool reach in ER's screens.
 archforge-er-ui = { workspace = true, features = ["snapshot"] }

@@ -15,7 +15,7 @@ use serde_json::json;
 
 use super::Screen;
 use archforge_ui_egui::chat_words::Clock;
-use archforge_ui_egui::snapshot;
+use archforge_ui_egui::testing;
 use archforge_ui_egui::{BranchEntry, Shell, VersionEntry, VersionRead, VersionReadError, VersionsPage};
 
 /// The screens built here.
@@ -98,7 +98,7 @@ fn run(shell: &mut Shell, command: &str, params: serde_json::Value) -> Result<St
 /// and adds email since; its Compare page and moved box save the rename as Renamed email first.
 /// Versions is the explorer, the clock Chat's.
 pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    snapshot::adopt_project(shell);
+    testing::adopt_project(shell);
     let root = run(shell, "uml.model.root", json!({}))?;
     let diagram = run(shell, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce" }))?;
     let customer = run(shell, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
@@ -170,7 +170,7 @@ pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 /// Whether nothing the screens read, compare or hold the project for is still on its way.
 fn idle(shell: &Shell) -> bool {
     // Current work alone is compared: a version in view never is.
-    (shell.viewing().is_some() || snapshot::changes_settled(shell)) && !snapshot::reading_versions(shell) && !shell.is_held()
+    (shell.viewing().is_some() || testing::changes_settled(shell)) && !testing::reading_versions(shell) && !shell.is_held()
 }
 
 /// Draws frames until nothing is on its way twice running, giving the comparing threads their turn
@@ -191,7 +191,7 @@ fn settle(h: &mut egui_kittest::Harness<'static, Shell>) -> Result<(), String> {
 
 /// The version listed as `hash`.
 fn listed(shell: &Shell, hash: &str) -> Result<VersionEntry, String> {
-    let page = snapshot::versions_page(shell).ok_or("the versions were not read")?;
+    let page = testing::versions_page(shell).ok_or("the versions were not read")?;
     page.versions.iter().find(|v| v.hash == hash).cloned().ok_or_else(|| format!("no version {hash}"))
 }
 
@@ -214,22 +214,22 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
     let shell = h.state_mut();
     let clock = archforge_ui_egui::chat_panel::clock(shell);
     match screen {
-        Screen::WorkspaceVersionList => snapshot::open_version_list(shell),
-        Screen::WorkspaceVersionDetails => snapshot::open_version_details(shell, listed(shell, "c2")?),
+        Screen::WorkspaceVersionList => testing::open_version_list(shell),
+        Screen::WorkspaceVersionDetails => testing::open_version_details(shell, listed(shell, "c2")?),
         Screen::GuideCompare => {
-            snapshot::open_version_details(shell, listed(shell, "c2")?);
-            snapshot::compare_from_menu(shell);
-            if !snapshot::compare_open(shell) {
+            testing::open_version_details(shell, listed(shell, "c2")?);
+            testing::compare_from_menu(shell);
+            if !testing::compare_open(shell) {
                 return Err("the Compare page did not open".into());
             }
         }
         Screen::GuideVersionChange => {
-            let row = snapshot::changes(shell).iter().find(|d| d.name.as_deref() == Some("email")).cloned().ok_or("no change to email")?;
-            snapshot::open_change(shell, row);
+            let row = testing::changes(shell).iter().find(|d| d.name.as_deref() == Some("email")).cloned().ok_or("no change to email")?;
+            testing::open_change(shell, row);
         }
         Screen::WorkspaceVersionViewing | Screen::GuideVersionViewing => {
-            let label = snapshot::version_when(&listed(shell, "c1")?.date, clock);
-            if !snapshot::view_version(shell, "c1".into(), label) {
+            let label = testing::version_when(&listed(shell, "c1")?.date, clock);
+            if !testing::view_version(shell, "c1".into(), label) {
                 return Err("the version could not be shown".into());
             }
         }
@@ -239,13 +239,13 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
             } else {
                 archforge_notations::differences::Area::Diagram
             };
-            let row = snapshot::changes(shell).iter().find(|d| d.area == area).cloned().ok_or("no such change")?;
-            snapshot::open_change(shell, row);
+            let row = testing::changes(shell).iter().find(|d| d.area == area).cloned().ok_or("no such change")?;
+            testing::open_change(shell, row);
         }
         Screen::WorkspaceRestoreAsk => {
             let entry = listed(shell, "c1")?;
-            let saved = snapshot::version_when(&entry.date, clock);
-            snapshot::ask_restore(shell, ("c1".into(), saved, snapshot::version_dated(&entry, clock)));
+            let saved = testing::version_when(&entry.date, clock);
+            testing::ask_restore(shell, ("c1".into(), saved, testing::version_dated(&entry, clock)));
         }
         _ => {}
     }
@@ -270,7 +270,6 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
 mod tests {
     use super::*;
     use archforge_notations::differences::{Area, ChangeKind};
-    use archforge_ui_egui::testing;
 
     /// Every Versions screen of the manual builds its versions and reaches what it shows in both
     /// appearances: what is compared, the list, the details, the version in view, the two sides,
@@ -282,7 +281,7 @@ mod tests {
             for theme in [archforge_ui_egui::theme::ThemeKind::Light, archforge_ui_egui::theme::ThemeKind::Dark] {
                 let h = super::super::drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
                 let s = h.state();
-                let (changes, page, branches) = (snapshot::changes(s), snapshot::versions_page(s), testing::branches(s));
+                let (changes, page, branches) = (testing::changes(s), testing::versions_page(s), testing::branches(s));
                 let side = |area| testing::opened_change(s).is_some_and(|row| row.area == area);
                 // The Compare page's pair and what it found: Added Customer to Added email adds
                 // Types, String and email.
@@ -309,7 +308,7 @@ mod tests {
                         compared
                             && changes.is_empty()
                             && s.session.as_ref().is_some_and(|session| !session.is_dirty())
-                            && snapshot::compare_open(s)
+                            && testing::compare_open(s)
                             && page.is_some_and(|p| p.versions.len() == 3)
                     }
                     Screen::GuideChangeDiagram => side(Area::Diagram) && changes.len() == 1 && page.is_some_and(|p| p.versions.len() == 3),

@@ -66,7 +66,7 @@ fn the_menu_lists_only_what_the_open_diagram_offers() {
         assert_eq!(drawn_rows(&mut h), model_sections(h.state()).concat(), "{theme:?}");
         let root = h.state().session.as_ref().map(|s| s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap()).unwrap();
         let skill = serde_json::json!({ "subject": root.to_string(), "name": "Naming", "body": "text" });
-        let skill = archforge_ui_egui::snapshot::run(h.state_mut(), "skill.add", skill).unwrap();
+        let skill = archforge_ui_egui::testing::run(h.state_mut(), "skill.add", skill).unwrap();
         archforge_ui_egui::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(skill["id"].as_str().unwrap()).unwrap());
         assert_eq!(model_sections(h.state()), [SHARED], "{theme:?}: a skill");
         assert!(!available(h.state(), "model.note"), "{theme:?}: a skill");

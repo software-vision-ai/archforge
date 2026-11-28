@@ -39,10 +39,10 @@ pub mod uml_inline {
     pub use crate::uml_inline::{details_ink, open};
 }
 
-/// The Relationship tool's kinds, an association's ends and the refused typed end the sample
-/// builder makes.
+/// The Relationship tool's kinds, an association's ends, the ends' editor as the model has it and
+/// why a typed multiplicity does not read.
 pub mod uml_relate {
-    pub use crate::uml_relate::{EndModifiers, EndsEdit, Relate, connect, reconnect, refuse_typed};
+    pub use crate::uml_relate::{EndModifiers, EndsEdit, Relate, connect, ends_edit, multiplicity_problem, reconnect};
 }
 
 /// N-ary associations: drawn end by end, their ends' editor and the sample that recommends one.
@@ -60,20 +60,20 @@ pub mod uml_constraints {
     pub use crate::uml_constraints::{open, row_text};
 }
 
-/// A qualifier's editor and the refused qualifier the sample builder makes.
+/// A qualifier's editor and its commit.
 pub mod uml_qualifiers {
-    pub use crate::uml_qualifiers::{open, refuse_sample};
+    pub use crate::uml_qualifiers::{commit, open};
 }
 
-/// A template parameter's editor, a parameter in use and the removal the sample builder makes.
+/// A template parameter's editor, a parameter in use and the editor's bin.
 pub mod uml_templates {
-    pub use crate::uml_templates::{InUse, open, remove_sample};
+    pub use crate::uml_templates::{InUse, open, remove_parameter};
 }
 
-/// A template binding: its draft's line, the editor of a new one, its refusal and the binding the
-/// sample builder applies.
+/// A template binding: its draft's line, the editor of a new one, its refusal and the draft's
+/// Apply.
 pub mod uml_bindings {
-    pub use crate::uml_bindings::{apply_sample, draft_line, open_new, refusal};
+    pub use crate::uml_bindings::{apply_draft, draft_line, open_new, refusal};
 }
 
 /// Nested classifiers: their section's ids, an addition and the owner menu's rows.
@@ -90,10 +90,9 @@ pub mod uml_profiles {
     };
 }
 
-/// Stereotypes applied: their section's ids and state, the values compartments and the values the
-/// sample builder sets.
+/// Stereotypes applied: their section's ids and state and the values compartments.
 pub mod uml_stereotypes {
-    pub use crate::uml_stereotypes::{ADD_ID, APPLIED_ID, SHOW_ID, Stereotypes, put_values, show_values};
+    pub use crate::uml_stereotypes::{ADD_ID, APPLIED_ID, SHOW_ID, Stereotypes, show_values};
 }
 
 /// A package's card: its thumbnail's look and preview.

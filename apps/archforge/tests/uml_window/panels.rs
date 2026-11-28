@@ -52,7 +52,7 @@ fn the_skills_panel_offers_add_skill_only_where_the_selection_carries_skills() {
             let out = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": "Priority" })).unwrap();
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, priority, &["Low"])).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, priority, &["Low"])).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Skills);
         h.run();
         let low = {
@@ -212,7 +212,7 @@ fn escape_closes_about_and_leaves_a_draft_behind_it_as_it_was() {
 #[test]
 fn about_closes_the_bars_search_and_its_keys_never_reach_the_search_behind_it() {
     let (mut h, _order) = class_properties("Order");
-    archforge_ui_egui::snapshot::open_home_search(h.state_mut(), "order");
+    archforge_ui_egui::testing::open_home_search(h.state_mut(), "order");
     h.run();
     assert!(h.state().home_search.open);
     h.state_mut().open_about();

@@ -869,7 +869,7 @@ impl EndModifiers {
 }
 
 /// The ends' editor of association `a`, whose id is `id`, as the model has it.
-fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
+pub fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
     let ends = archforge_uml::figures::member_ends(store, a)?;
     let role = ends.map(|e| archforge_core::name_of(store, e));
     let multiplicity = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
@@ -905,28 +905,12 @@ pub(crate) fn end_refusal(uis: &[&'static dyn NotationUi], store: &Store, end: O
     crate::uml_panel::target_refusals(store, &shape, Some(&shape), (&m.subsets, &had.subsets), (&m.redefines, &had.redefines))
 }
 
-/// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
-/// to look at.
-#[cfg(feature = "snapshot")]
-pub fn refuse_typed(cx: &mut Ctx, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
-    let store = cx.session.as_ref().ok_or("no project is open")?.doc();
-    let a = store.by_uuid(id).ok_or("no such association")?;
-    let mut edit = ends_edit(store, a, id).ok_or("not an association")?;
-    let why = archforge_uml::members::parse_multiplicity(typed).err().ok_or("the sample reads")?;
-    *edit.multiplicity.get_mut(end).ok_or("no such end")? = typed.to_string();
-    *edit.refused.get_mut(end).ok_or("no such end")? = Some(multiplicity_problem(&why));
-    if let Some(uml) = uml_mut(cx.notation_states) {
-        uml.ends = Some(edit);
-    }
-    Ok(())
-}
-
 /// The common multiplicities an end's menu offers, in the design's order: none to many once, as
 /// `*`, the way the model writes it; `0..*` typed still reads as it.
 pub(crate) const MULTIPLICITIES: [&str; 4] = ["0..1", "1", "*", "1..*"];
 
 /// Why a typed multiplicity does not read, in the user's language.
-pub(crate) fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {
+pub fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {
     use archforge_uml::members::MultiplicityError as E;
     match e {
         E::Malformed(_) => tr("Type a whole number, a range such as 2..5, or *."),

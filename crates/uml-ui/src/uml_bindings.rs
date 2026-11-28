@@ -531,7 +531,7 @@ fn draft_foot(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32)
 }
 
 /// Writes the draft as one undo step, or says what it still needs and keeps it open.
-fn apply_draft(cx: &mut Ctx) {
+pub fn apply_draft(cx: &mut Ctx) {
     let Some(draft) = uml(cx.notation_states).and_then(|uml| uml.binding.clone()) else { return };
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     if let Some(why) = missing_words(store, &draft) {
@@ -685,12 +685,6 @@ pub(crate) fn retain_valid(draft: &mut Option<BindingDraft>, store: &Store) {
     }) {
         *draft = None;
     }
-}
-
-/// The open draft's Apply pressed, as a sample to look at.
-#[cfg(feature = "snapshot")]
-pub fn apply_sample(cx: &mut Ctx) {
-    apply_draft(cx);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.

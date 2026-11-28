@@ -140,7 +140,7 @@ fn a_package_added_with_nothing_selected_takes_a_name_free_in_the_root_package()
         archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect::<Vec<_>>()
     };
     for _ in 0..2 {
-        let added = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::UmlUi.add(cx, "package", None)).expect("a package offer");
+        let added = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::UmlUi.add(cx, "package", None)).expect("a package offer");
         assert!(added.as_ref().err().is_none(), "{:?}", added.err());
         h.run();
     }
@@ -210,7 +210,7 @@ fn a_nested_package_s_delete_dialog_counts_only_what_goes_with_the_package() {
         let associations = [&payment, &audit].map(|to| run("uml.association.add", serde_json::json!({ "from": invoice, "to": to })));
         let node = run("diagram.place", serde_json::json!({ "diagram": d, "element": billing, "x": 900, "y": 640 }));
         let ask = |h: &mut Harness<'static, Shell>| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [node] })).unwrap();
+            archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [node] })).unwrap();
             h.state_mut().canvas.focused = true;
             h.run();
             key(h, egui::Key::Delete, egui::Modifiers::SHIFT);
@@ -376,8 +376,8 @@ fn shift_delete_on_an_association_class_line_without_its_card_asks_and_deletes_i
         let mut r = reviews(theme);
         let (ac, _, card) = r.review();
         let d = r.diagram.clone();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
         r.h.run();
         let before = r.shown();
         let at = r.line_middle() + egui::vec2(-60.0, 0.0);
@@ -434,7 +434,7 @@ fn the_delete_dialog_counts_what_goes_with_an_association_class_too() {
         let mut r = reviews(theme);
         let (ac, _, _) = r.review();
         let store = r.ids["Store"].clone();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "uml.dependency.add", serde_json::json!({ "client": store, "supplier": ac })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "uml.dependency.add", serde_json::json!({ "client": store, "supplier": ac })).unwrap();
         r.h.run();
         let at = r.at("Product");
         click(&mut r.h, at);
@@ -457,7 +457,7 @@ fn an_association_class_dragged_from_models_places_its_card_with_its_line() {
         let mut r = reviews(theme);
         let (ac, _, card) = r.review();
         // Off this diagram, then back from Models.
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
         r.h.state_mut().state.show_explorer(archforge_shell_api::state::Explorer::Models);
         for id in [&r.package, &ac] {
             r.h.state_mut().explorer.expanded.insert(archforge_mof::Uuid::parse(id).unwrap());
@@ -678,7 +678,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         h.run();
         // Dropped there from Models, as a row dragged onto the canvas is.
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(other).unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| {
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| {
             archforge_shell_api::kinds::DiagramKind::drop(&uml_ui::UmlKind, cx, d, made, (200.0, 200.0))
         });
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place enumeration"), "notice {:?}", h.state().canvas.notice);
@@ -710,7 +710,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
 fn a_nested_classifier_dropped_within_its_package_stays_and_onto_a_package_row_moves() {
     use archforge_shell_api::notation_ui::NotationUi;
     let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let (priority, order) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_nested_priority).unwrap();
+    let (priority, order) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_nested_priority).unwrap();
     let other = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap();
     let other = other.value["id"].as_str().unwrap().to_string();
     let invoice =
@@ -744,7 +744,7 @@ fn a_new_nested_classifier_is_named_in_models_once_the_call_returns() {
     shell.explorer.expanded.clear();
     (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("zzz".into(), None, false);
     (shell.state.explorer, shell.state.explorer_collapsed) = (Explorer::Diagrams, true);
-    let (made, asked) = archforge_ui_egui::snapshot::cx(shell, |cx| {
+    let (made, asked) = archforge_ui_egui::testing::cx(shell, |cx| {
         let made = uml_nesting::add_nested(cx, order, uml_classifier::Classifier::Enumeration).expect("made");
         (made, cx.requests.clone())
     });

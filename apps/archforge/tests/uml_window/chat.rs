@@ -280,7 +280,7 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         let _ = &rig;
         h.state_mut().open_project(archforge_ui_egui::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Agent);
         h.run();
         ask_in_chat(&mut h, "Here");

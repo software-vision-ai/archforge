@@ -12,14 +12,14 @@ fn a_new_stereotype_is_named_in_models_once_the_call_returns() {
     use archforge_shell_api::cx::Request;
     use archforge_shell_api::state::Explorer;
     let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let (_, persistence, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+    let (_, persistence, _) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
     let persistence = archforge_mof::Uuid::parse(&persistence).unwrap();
     let shell = h.state_mut();
     let profile = shell.session.as_ref().unwrap().doc().by_uuid(persistence).unwrap();
     shell.explorer.expanded.clear();
     (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("zzz".into(), None, false);
     (shell.state.explorer, shell.state.explorer_collapsed) = (Explorer::Diagrams, true);
-    let (made, asked) = archforge_ui_egui::snapshot::cx(shell, |cx| {
+    let (made, asked) = archforge_ui_egui::testing::cx(shell, |cx| {
         let made = uml_profiles::add_inside(cx, "stereotype", profile).expect("offered").expect("made");
         (made, cx.requests.clone())
     });
@@ -127,7 +127,7 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
 
         // F6: in use, Unapply is refused with the uses counted, and they can be selected.
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (commerce, persistence, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
+        let (commerce, persistence, _) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [commerce] })).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
@@ -154,7 +154,7 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
 fn show_stereotype_values_refused_says_why_in_plain_words() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
         select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
@@ -177,7 +177,7 @@ fn show_stereotype_values_refused_says_why_in_plain_words() {
 fn deleting_a_stereotyped_element_names_its_applications() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
         // A member selected: the section is its own.
         let id_attr = {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -216,7 +216,7 @@ fn deleting_a_stereotyped_element_names_its_applications() {
 fn a_members_remove_asks_before_its_stereotype_applications_go() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
         let order = select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         let member = |h: &Harness<'static, Shell>, n: &str| {
@@ -225,7 +225,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
             archforge_uml::members::attributes(st, o).into_iter().find(|a| archforge_core::name_of(st, *a) == n).and_then(|a| st.uuid(a).ok())
         };
         let id_attr = member(&h, "id").unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(id_attr)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(id_attr)));
         h.run();
         let before = h.state().session.as_ref().unwrap().revision();
         let at = rect_of(&h, "workspace.properties.member.remove").center();
@@ -239,7 +239,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
         assert_eq!(member(&h, "id"), None, "{theme:?}: removed once confirmed");
         // One without an application goes at once.
         let placed = member(&h, "placedAt").unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(placed)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(placed)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.remove").center();
         click(&mut h, at);
@@ -256,7 +256,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
 fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (commerce, persistence, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+        let (commerce, persistence, _) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
         {
             let s = h.state_mut().session.as_mut().unwrap();
             let module =
@@ -310,7 +310,7 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
 fn the_picker_keeps_its_keys_from_the_models_tree() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
         let order = select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
@@ -341,7 +341,7 @@ fn the_picker_keeps_its_keys_from_the_models_tree() {
 fn the_stereotype_picker_filter_ignores_capitals_and_accents() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, persistence, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+        let (_, persistence, _) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
         let row = |h: &mut Harness<'static, Shell>, name: &str| {
             let s = h.state_mut().session.as_mut().unwrap();
             let made = s.execute("uml.stereotype.add", &serde_json::json!({ "profile": persistence, "name": name, "extends": ["Class"] })).unwrap();

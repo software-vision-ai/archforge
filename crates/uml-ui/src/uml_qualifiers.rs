@@ -354,7 +354,7 @@ pub(crate) fn refusal(store: &Store, edit: &QualifierEdit) -> Option<(String, &'
 
 /// Writes the editor as one undo step, or says why not, leaving the model and its history as
 /// they were.
-fn commit(cx: &mut Ctx, edit: &QualifierEdit) {
+pub fn commit(cx: &mut Ctx, edit: &QualifierEdit) {
     if let Some((why, at)) = cx.session.as_ref().and_then(|s| refusal(s.doc(), edit)) {
         refuse(cx, why, Some(at));
         return;
@@ -391,20 +391,6 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
     if edit.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none() || e.target.is_some_and(|t| store.by_uuid(t).is_none())) {
         *edit = None;
     }
-}
-
-/// `typed` as a new qualifier's name on end `end` of association `association`, applied and
-/// refused, as a sample to look at.
-#[cfg(feature = "snapshot")]
-pub fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: &str, ty: &str) {
-    open(cx, association, end, None);
-    if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
-        e.name = typed.to_string();
-        e.ty = ty.to_string();
-        e.multiplicity = "1".to_string();
-    }
-    let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.qualifier.clone()) else { return };
-    commit(cx, &edit);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.

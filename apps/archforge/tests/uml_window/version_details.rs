@@ -69,7 +69,7 @@ fn a_uml_diagrams_two_sides_draw_its_kinds_own_figures() {
         super::compared(&mut h);
         let node = place(&mut h, &fresh, 400, 0);
         list_still(&mut h);
-        let row = archforge_ui_egui::snapshot::changes(h.state()).iter().find(|r| r.area == Area::Diagram && r.id.to_string() == node).unwrap();
+        let row = archforge_ui_egui::testing::changes(h.state()).iter().find(|r| r.area == Area::Diagram && r.id.to_string() == node).unwrap();
         let row = format!("workspace.versions.change.{}.{}", row.id, row.class.0);
         tap(&mut h, &row);
         frames_until(&mut h, |h| !archforge_ui_egui::testing::reading_element(h.state()) && has_id(h, BEFORE));

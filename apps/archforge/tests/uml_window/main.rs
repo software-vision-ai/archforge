@@ -1,8 +1,8 @@
 //! UML's window tests: the whole app's shell, given ER's and UML's screens as the app registers
 //! them, drawn in a harness in both appearances, its controls found and pressed by automation id
 //! (ADR 0005: whole-app behaviour with real notations is tested in the app). They reach the shell
-//! through `archforge_ui_egui::testing` and `archforge_ui_egui::snapshot`, and UML's screens
-//! through `archforge_uml_ui::snapshot`. Here are their harnesses, samples, fake hosts and probes;
+//! through `archforge_ui_egui::testing`, and UML's screens through `archforge_uml_ui::snapshot`.
+//! Here are their harnesses, samples, fake hosts and probes;
 //! the tests are in the module of their area: the canvas, its tools and tabs, and relationships in
 //! `canvas`; Properties in `properties` and its keys in `properties_keys`; Models in `models`;
 //! profiles and stereotypes in `profiles`; Chat in `chat`; the rail's panels and About in
@@ -48,7 +48,7 @@ fn uml_of(shell: &Shell) -> &uml_state::UmlState {
 
 /// UML's own state in `shell`, to change.
 fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
-    uml_state::uml_mut(archforge_ui_egui::snapshot::notation_states(shell)).expect("the shell's notations hold UML")
+    uml_state::uml_mut(archforge_ui_egui::testing::notation_states(shell)).expect("the shell's notations hold UML")
 }
 
 /// The rows of the model shown, as a host reads them.
@@ -375,7 +375,7 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
 /// The sample class model open on its class diagram, and the edge of its association `name`.
 fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Obj, archforge_mof::Obj) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -451,7 +451,7 @@ fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::U
         let place = serde_json::json!({ "diagram": d.to_string(), "element": element.to_string(), "x": x, "y": 80, "width": 280, "height": height });
         run(&mut h, "diagram.place", place);
     }
-    archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped"])).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped"])).unwrap();
     archforge_ui_egui::canvas::open(h.state_mut(), d);
     h.run();
     let shell = h.state_mut();
@@ -525,7 +525,7 @@ fn related_sample() -> (Harness<'static, Shell>, std::collections::BTreeMap<Stri
 /// [`related_sample`] in `theme` in a window of `size`.
 fn related_sample_in(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
     let mut h = workspace_harness(theme, size);
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -622,7 +622,7 @@ fn point_on_edge(h: &Harness<'static, Shell>, edge: archforge_mof::Uuid) -> egui
 /// Payment's.
 fn sample_with_a_set_and_a_rule(theme: ThemeKind) -> (Harness<'static, Shell>, [String; 3], String) {
     let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let (gens, payment) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+    let (gens, payment) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": [gens[1]], "name": "Kinds" })).unwrap();
     let rule = serde_json::json!({ "context": payment, "name": "settled", "expression": "x", "constrained": [gens[1], payment] });
@@ -686,7 +686,7 @@ fn literal_sample(
     let (mut h, nodes, [status_node, _]) = enumeration_sample(theme);
     let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
     if !literals.is_empty() {
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, literals)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, literals)).unwrap();
     }
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
     h.run();
@@ -1163,9 +1163,9 @@ fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::
 /// [`nary_sample`] in a window of `size`.
 fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
     let mut h = workspace_harness(theme, size);
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
-    let ids = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_nary::put_recommends(cx, drawn)).unwrap();
+    let ids = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_nary::put_recommends(cx, drawn)).unwrap();
     h.state_mut().canvas.fit_pending = false;
     h.state_mut().canvas.zoom = 1.0;
     h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
@@ -1786,7 +1786,7 @@ const CONSTRAINT_CANCEL: &str = "workspace.properties.constraint.cancel";
 fn order_properties(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
     let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
     let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-    archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+    archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
     h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
     h.run();
     (h, order, nodes["Order"].clone())
@@ -1833,7 +1833,7 @@ fn wheel_properties(h: &mut Harness<'static, Shell>, dy: f32) {
 /// for a class the diagram no longer shows: Apply is refused above the buttons.
 fn constraint_refused(theme: ThemeKind) -> Harness<'static, Shell> {
     let (mut h, _, node) = order_properties(theme);
-    archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [node] })).unwrap();
+    archforge_ui_egui::testing::run(h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [node] })).unwrap();
     h.run();
     let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
     click(&mut h, at);
@@ -1927,7 +1927,7 @@ fn found(n: u8) -> archforge_notations::differences::Difference {
 /// The sample class model open with `class` selected and Properties showing it; gives its id.
 fn class_properties(class: &str) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
     let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == class).unwrap();
     let id = st.uuid(c).unwrap();

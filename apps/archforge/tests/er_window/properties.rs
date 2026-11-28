@@ -13,14 +13,14 @@ fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let mut id =
-            |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+            |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
         let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Orders" }));
         for i in 0..30 {
             let column = id("er.attribute.add", serde_json::json!({ "entity": table, "name": format!("c{i}"), "type": "TEXT" }));
             id("er.unique.add", serde_json::json!({ "entity": table, "columns": [column], "name": format!("u{i}") }));
         }
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [table] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [table] })).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
         let entity = archforge_mof::Uuid::parse(&table).unwrap();
@@ -32,8 +32,8 @@ fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
         let above = h.state().panels.body.unwrap().top() - at.y;
         wheel_properties(&mut h, above - 200.0);
         assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.check")), "{theme:?}: Checks under the fold");
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_keys::open(cx, entity, Some(&first)));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_checks::open(cx, entity, None));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_keys::open(cx, entity, Some(&first)));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_checks::open(cx, entity, None));
         h.run();
         assert!(in_view(&h, "workspace.properties.check.apply").is_some(), "{theme:?}: the check's Apply in view");
     });
@@ -50,14 +50,14 @@ fn the_delete_dialog_says_the_keys_that_go_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let mut id =
-            |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+            |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let schema = id("er.schema.add", json!({ "name": "Shop" }));
         let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
         let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
         let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
         let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
         id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", json!({ "ids": [nummer] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", json!({ "ids": [nummer] })).unwrap();
         h.run();
         archforge_ui_egui::explorer::remove_selection(h.state_mut());
         h.run();
@@ -733,7 +733,7 @@ fn the_column_editor_makes_a_computed_or_identity_column_plain_with_a_default() 
         // A column being added that was made computed, given an expression and made plain again
         // is added plain, without the expression its hidden field still holds.
         let (mut h, customer) = table_harness_in(theme);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_table::open_column(cx, archforge_mof::Uuid::parse(&customer).unwrap(), None));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_table::open_column(cx, archforge_mof::Uuid::parse(&customer).unwrap(), None));
         h.run();
         er_of_mut(h.state_mut()).column.as_mut().unwrap().name = "nickname".into();
         er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "TEXT".into();

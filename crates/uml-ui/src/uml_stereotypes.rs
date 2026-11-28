@@ -899,36 +899,6 @@ pub(crate) fn going_along(uis: &[&'static dyn NotationUi], store: &Store, elemen
         .collect()
 }
 
-/// In the sample class model with Persistence applied and used (F6), the values of F3: Order's
-/// table set to `orders`, cached left to its default; the profile Auditing (Auditable, extending
-/// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
-/// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
-#[cfg(feature = "snapshot")]
-pub fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
-    let (commerce, _, entity) = crate::uml_profiles::put_profiles(cx, true)?;
-    let session = cx.session.as_mut().ok_or("the sample needs a session")?;
-    let order = {
-        let st = session.doc();
-        let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(st, *o) == "Order").ok_or("Order")?;
-        st.uuid(o).map_err(|e| e.to_string())?
-    };
-    let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-    let mut run = |cmd: &str, p: serde_json::Value| session.execute(cmd, &p).map(|o| id(o.value)).map_err(|e| format!("{cmd}: {e}"));
-    run("uml.stereotype.set-value", json!({ "element": order.to_string(), "stereotype": entity, "property": "table", "values": ["orders"] }))?;
-    let auditing = run("uml.profile.add", json!({ "name": "Auditing" }))?;
-    run("uml.stereotype.add", json!({ "profile": auditing, "name": "Auditable", "extends": ["Class"] }))?;
-    run("uml.profile.apply", json!({ "package": commerce, "profile": auditing }))?;
-    let logging = run("uml.profile.add", json!({ "name": "Logging" }))?;
-    run("uml.stereotype.add", json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] }))?;
-    if let Some(d) = cx.canvas.active {
-        show_values(cx, d, true)?;
-    }
-    if let Some(s) = cx.session.as_mut() {
-        s.mark_saved().map_err(|e| e.to_string())?;
-    }
-    Ok(order)
-}
-
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the section's `+` hint and its helps.
 #[cfg(feature = "snapshot")]
