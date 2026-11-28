@@ -3230,13 +3230,14 @@ fn an_element_reads_in_its_notations_words() {
 }
 
 /// A list of features is headed as the notation the shell registered names it, not as a fixed
-/// list: the sketch heads its attributes its own way, a list of a kind it has no heading for and
+/// list: the sketch, registered after another notation, heads its attributes its own way, a list of a kind it has no heading for and
 /// one of a class no notation of the shell's holds are headed Members; a shell given no notation
 /// heads the attributes Members too.
 #[test]
 fn a_list_of_features_is_headed_by_its_notation() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
+        h.state_mut().notation_uis = SKETCH_UIS;
         let side = || {
             vec![
                 list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Said("id".into()), None)]),

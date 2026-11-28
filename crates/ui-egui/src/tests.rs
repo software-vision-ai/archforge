@@ -7326,10 +7326,14 @@ fn painted<S>(h: &Harness<'_, S>) -> Vec<String> {
 }
 
 /// A workspace with a sketch diagram of a package: Party (`partyId`, `rename()`) at the left,
-/// Customer (`since`) at the right, Customer a kind of Party. Gives the diagram, Party's node,
-/// Customer's node and the line's edge.
+/// Customer (`since`) at the right, Customer a kind of Party. The shell knows another kind before
+/// the sketch's ([`SKETCH_KINDS`]) and another notation before the sketch's ([`SKETCH_UIS`]), so
+/// what the diagram's own kind and an element's own notation are asked is told apart from what the
+/// first would answer. Gives the diagram, Party's node, Customer's node and the line's edge.
 fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    h.state_mut().kinds = SKETCH_KINDS;
+    h.state_mut().notation_uis = SKETCH_UIS;
     let (d, a, b, e) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
@@ -8884,7 +8888,9 @@ fn sketch_calls() -> Vec<String> {
 
 /// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
 /// Inherit tool that connects, each hook writing down what it was asked. It serves the diagram kind
-/// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart.
+/// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart: a kind other than
+/// [`SKETCH`] writes its name before what it was asked, gives no element menu and draws nothing on
+/// the cards and lines, as one notation's kind draws nothing on another's.
 struct SketchKind(&'static str);
 
 /// What the sketch kind's status marks toggle says on hover.
@@ -8926,6 +8932,14 @@ static SECOND_SKETCH_MENU: &[&[crate::kinds::ModelRow]] = &[&[crate::kinds::Mode
     tool: crate::canvas::Tool::Place("class"),
     choice: None,
 }]];
+
+impl SketchKind {
+    /// Writes down what this kind's hook was asked: as asked for the canvas's tests' own kind
+    /// ([`SKETCH`]), after its own kind for any other, so a test sees which kind was asked.
+    fn asked(&self, call: String) {
+        sketch_call(if self.0 == SKETCH { call } else { format!("{}: {call}", self.0) });
+    }
+}
 
 impl crate::kinds::DiagramKind for SketchKind {
     /// The kind it was given, which no notation of the shell knows.
@@ -8981,9 +8995,10 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
         Err("the sketch makes no package".into())
     }
-    /// Its status marks toggle, in its own words, so a test sees it asked.
+    /// Its status marks toggle, in its own words, so a test sees it asked: another kind's after its
+    /// name.
     fn status_marks(&self) -> Option<String> {
-        Some(SKETCH_MARKS.into())
+        Some(if self.0 == SKETCH { SKETCH_MARKS.into() } else { format!("{} marks", self.0) })
     }
     /// A UML class takes part in the sketch's gestures.
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
@@ -8991,7 +9006,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     /// Writes down the tool it was asked to place with.
     fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
-        sketch_call(format!("place {tool}"));
+        self.asked(format!("place {tool}"));
     }
     /// Writes down the tool and the names of the two nodes' elements it was asked to connect.
     fn connect(&self, cx: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
@@ -9002,11 +9017,11 @@ impl crate::kinds::DiagramKind for SketchKind {
                 Some(archforge_core::name_of(st, e))
             })
         };
-        sketch_call(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
+        self.asked(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
     }
     /// Writes down the tool of a line dropped on empty canvas.
     fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
-        sketch_call(format!("connect to new {tool}"));
+        self.asked(format!("connect to new {tool}"));
     }
     /// Its own popover of kinds, which the arrow keys walk, so a test sees whose kind is asked; no
     /// other.
@@ -9016,7 +9031,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     /// Writes down the name typed in place, and gives it to a class through the fake notation's
     /// rename.
     fn rename(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, name: &str) -> Result<(), String> {
-        sketch_call(format!("rename {name}"));
+        self.asked(format!("rename {name}"));
         let class = cx
             .session
             .as_ref()
@@ -9031,16 +9046,21 @@ impl crate::kinds::DiagramKind for SketchKind {
     /// the tests that read what the other hooks were asked never see it.
     fn open(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, row: Option<usize>) {
         let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(element).map(|e| archforge_core::name_of(s.doc(), e)));
-        let calls = if name.as_deref() == Some(SKETCH_OPENS) { &SKETCH_OPENED } else { &SKETCH_CALLS };
-        calls.with_borrow_mut(|calls| calls.push(format!("open {row:?}")));
+        if name.as_deref() == Some(SKETCH_OPENS) {
+            let call = format!("open {row:?}");
+            SKETCH_OPENED.with_borrow_mut(|calls| calls.push(if self.0 == SKETCH { call } else { format!("{}: {call}", self.0) }));
+        } else {
+            self.asked(format!("open {row:?}"));
+        }
     }
     /// Its lines' ends take handles, which move nothing and say its own words on hover, so a test
     /// sees it asked.
     fn reconnects(&self) -> Option<String> {
-        Some(SKETCH_ENDS.into())
+        Some(if self.0 == SKETCH { SKETCH_ENDS.into() } else { format!("Drag onto another {} card", self.0) })
     }
-    /// Party's menu: a first row that is off, then one after Open in Models that writes down what
-    /// it was picked on; Customer takes none.
+    /// Party's menu, from the canvas's tests' own kind ([`SKETCH`]) alone, so a menu built from
+    /// another kind shows: a first row that is off, then one after Open in Models that writes down
+    /// what it was picked on; Customer takes none.
     fn menu(&self, store: &archforge_mof::Store, element: archforge_mof::Obj, mac: bool) -> Option<Vec<crate::kinds::MenuRow>> {
         let first = crate::kinds::MenuRow {
             key: "sketch-first",
@@ -9061,13 +9081,12 @@ impl crate::kinds::DiagramKind for SketchKind {
                 sketch_call(format!("menu own {}", name.unwrap_or_default()));
             },
         };
-        (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
+        (self.0 == SKETCH && archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
     }
-    /// A class named [`SKETCH_OPENS`] opens whole with a double click, as a sketch kind other than
-    /// the canvas's tests' own ([`SKETCH`]) answers, so a test sees the kinds asked beside the
-    /// diagram's own.
+    /// A class named [`SKETCH_OPENS`] opens whole with a double click, as the opening kind
+    /// ([`SKETCH_OPENER`]) alone answers, so a test sees the kinds asked beside the diagram's own.
     fn opens_on_double_click(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
-        self.0 != SKETCH && archforge_core::name_of(store, element) == SKETCH_OPENS
+        self.0 == SKETCH_OPENER && archforge_core::name_of(store, element) == SKETCH_OPENS
     }
     /// The name typed on a card the sketch draws itself goes in the card's part over its top left,
     /// in the small style; any other card's in its header.
@@ -9081,7 +9100,8 @@ impl crate::kinds::DiagramKind for SketchKind {
         z: f32,
     ) -> Option<(egui::Rect, crate::ux::Type)> {
         let element = crate::canvas::element_of(store, node, archforge_diagram::node::ELEMENT)?;
-        (archforge_core::name_of(store, element) == SKETCH_DRAWN).then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
+        (self.0 == SKETCH && archforge_core::name_of(store, element) == SKETCH_DRAWN)
+            .then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
     }
     /// Draws the card of a class named [`SKETCH_DRAWN`] itself: a plain box with its own word, a
     /// part over its top left that takes a press and says [`SKETCH_PART_SAYS`] on hover, and a
@@ -9094,7 +9114,7 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> bool {
-        if archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
+        if self.0 != SKETCH || archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
             return false;
         }
         let z = d.view.zoom;
@@ -9134,6 +9154,9 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) {
+        if self.0 != SKETCH {
+            return;
+        }
         let at = card.rect.right_top() - egui::vec2(90.0, 8.0);
         let rect = crate::ux::text(paint, at, SKETCH_OVER, crate::ux::types::SMALL, d.p.text, None);
         if let Ok(id) = d.store.uuid(card.node) {
@@ -9151,6 +9174,9 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> Vec<egui::Shape> {
+        if self.0 != SKETCH {
+            return Vec::new();
+        }
         let (Some(start), Some(next)) = (points.first().copied(), points.get(1).copied()) else { return Vec::new() };
         let moved = start + (next - start).normalized() * SKETCH_END_SHIFT;
         d.moved_ends.borrow_mut().push((start, moved));
@@ -9170,7 +9196,8 @@ impl crate::kinds::DiagramKind for SketchKind {
         _: &mut crate::widgets::Registry,
         _: &egui::Ui,
     ) -> Option<egui::Rect> {
-        Some(egui::Rect::from_center_size(crate::canvas::along(line.points, 0.5) - egui::vec2(0.0, 30.0), egui::vec2(60.0, 14.0)))
+        (self.0 == SKETCH)
+            .then(|| egui::Rect::from_center_size(crate::canvas::along(line.points, 0.5) - egui::vec2(0.0, 30.0), egui::vec2(60.0, 14.0)))
     }
     /// Draws [`SKETCH_CAPTION`] above where its line's name sits, recorded; nothing for a line
     /// without a name.
@@ -9183,7 +9210,7 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) {
-        let Some(name) = name else { return };
+        let Some(name) = name.filter(|_| self.0 == SKETCH) else { return };
         let rect = crate::ux::text(paint, name.left_top() - egui::vec2(0.0, 20.0), SKETCH_CAPTION, crate::ux::types::SMALL, d.p.text, None);
         if let Ok(id) = d.store.uuid(line.line) {
             crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-caption.{id}"), "label", rect);
@@ -9268,8 +9295,13 @@ fn the_element_menu_builds_from_the_kinds_answer() {
     }
 }
 
-/// The sketch kind alone, as the shell the tests make is given it.
-static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
+/// The kinds the sketch's canvas tests give the shell: another kind first, then the sketch's, whose
+/// diagram is open, so a hook sent to the first kind instead of the diagram's own shows.
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH_OTHER), &SketchKind(SKETCH)];
+
+/// The kind the sketch's canvas tests register before the sketch's: none of the second sketch's
+/// screens part, so its popover and rows stay apart from it.
+const SKETCH_OTHER: &str = "test.other";
 
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
@@ -9582,8 +9614,12 @@ fn what_the_kinds_draw_among_the_links_goes_over_the_lines_and_under_the_cards()
     });
 }
 
-/// The sketch kind that opens [`SKETCH_OPENS`] whole, beside the diagram's own kind, which does not.
-static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &SketchKind("test.opening")];
+/// The sketch kind that opens [`SKETCH_OPENS`] whole, last, after another kind and the diagram's own,
+/// neither of which does: what opens is asked of every kind, and the editor of the diagram's own.
+static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH_OTHER), &SketchKind(SKETCH), &SketchKind(SKETCH_OPENER)];
+
+/// The sketch kind that opens a class named [`SKETCH_OPENS`] whole.
+const SKETCH_OPENER: &str = "test.opening";
 
 /// A double click on a card a kind of the shell opens whole opens its element's editor with no row,
 /// though the diagram's own kind does not say so; with no kind saying so, a double click on the
@@ -9623,7 +9659,7 @@ fn a_double_click_on_a_card_a_kind_opens_whole_opens_its_editor() {
 /// The kinds are asked what they draw of a card and a line, and the links between nodes, whatever
 /// kind the diagram is of, each once: drawn with no kind of its own, the sketch still draws its
 /// links, draws over the cards and moves the line's end; drawn as a sketch, it does each once, its
-/// line's name included.
+/// line's name included; the other kind registered before it draws its own links once too.
 #[test]
 fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
     let (mut h, d, a, b, e) = sketch_harness();
@@ -9637,6 +9673,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             (format!("workspace.canvas.sketch-end.{e}"), 1),
             (format!("workspace.canvas.sketch-caption.{e}"), caption),
             (format!("workspace.canvas.sketch-links.{SKETCH}"), 1),
+            (format!("workspace.canvas.sketch-links.{SKETCH_OTHER}"), 1),
         ]
     };
     let none = std::collections::BTreeMap::new();
@@ -10045,8 +10082,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
 }
 
-/// The sketch notation's screens alone, as the shell the tests make is given them.
-static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&SketchUi("sketch")];
+/// The notations the sketch's tests give the shell: the worded notation, which answers for none of
+/// the sketch's elements, first, then the sketch's, so what is asked of an element's own notation
+/// is told apart from what the first notation would answer.
+static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &SketchUi("sketch")];
 
 /// Two sketch notations told apart by name, both answering for UML's metamodel, so a test sees
 /// which of them answers and in what order.
@@ -10194,13 +10233,14 @@ fn the_refusal_words_ask_the_notations_the_shell_registered() {
 }
 
 /// Whether a name of nothing but spaces is refused is asked of the notations the shell registered,
-/// not of a fixed list: the sketch may leave its element unnamed, and its classes, which it never
+/// not of a fixed list: the sketch, registered after another notation, may leave its element unnamed, and its classes, which it never
 /// lets go unnamed, are refused; a shell given no notation refuses the sketch's rename too, as the
 /// sketch is not its own.
 #[test]
 fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
+    shell.notation_uis = SKETCH_UIS;
     assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
     assert_eq!(shell.panels.notice, None);
     assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "sketch.class.rename", "  ")), "a class is never unnamed");
@@ -10302,10 +10342,10 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
 
 /// A notation that answers for no element, as no class is of its metamodel, and only says words of
 /// its own: an association with its article, a sentence for an enum type without literals, a row
-/// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
-/// it is asked before them, so a test sees that the words a notation says inside its own sentences,
-/// a model's kind words, the catalogues and an opening's repair ask the notations the shell
-/// registered, not the app's own list.
+/// of its own catalogue, and a repair that leaves a tag in the model. Registered before the sketch
+/// ([`SKETCH_UIS`]), it is asked before it, so a test sees that the words a notation says inside its
+/// own sentences, a model's kind words, the catalogues and an opening's repair ask the notations the
+/// shell registered, not the app's own list, and that an element's own notation answers for it.
 struct WordsUi;
 
 /// The worded notation's word for an association with its article.
@@ -10420,15 +10460,12 @@ impl crate::notation_ui::NotationUi for WordsUi {
     }
 }
 
-/// The worded notation before the sketch.
-static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &SketchUi("sketch")];
-
 /// The catalogues registered are those of the notations a shell is given: the worded notation's
 /// row, which no notation of the app holds, is found in German once its catalogues are registered
 /// with the notations it comes with, as a shell registers its own.
 #[test]
 fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
-    crate::i18n::register_notations(WORDS_UIS.iter().map(|ui| ui.catalogues()));
+    crate::i18n::register_notations(SKETCH_UIS.iter().map(|ui| ui.catalogues()));
     crate::i18n::set_language("de");
     let row = WORDED_ROW;
     assert_eq!(crate::i18n::tr(row), "Eine Wortzeile");
@@ -10453,7 +10490,7 @@ fn an_opening_repairs_a_model_with_the_notations_the_shell_registered() {
         st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_core::TAG)).count()
     };
     assert_eq!(repaired(&shell), 0, "the app's notations");
-    shell.notation_uis = WORDS_UIS;
+    shell.notation_uis = SKETCH_UIS;
     assert_eq!(repaired(&shell), 1, "the worded notation's repair runs too");
 }
 
@@ -10888,14 +10925,15 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     assert_eq!(toast.as_deref(), Some("Order deleted · the sketch saw 1 go"), "{theme:?}");
 }
 
-/// The delete dialog says what goes with an element as the element's notation says it, in its own
-/// words, and asks only when something goes: a sketch class shown on no diagram goes at once from
+/// The delete dialog says what goes with an element as the element's notation says it, not the
+/// notation registered before it, in its own words, and asks only when something goes: a sketch class shown on no diagram goes at once from
 /// Models when the sketch says nothing goes with it, and asks with the sketch's sentence when it
 /// has an attribute; the canvas's Delete from the model says the same. In light and dark.
 #[test]
 fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().notation_uis = SKETCH_UIS;
         h.run();
         let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let pkg = {
