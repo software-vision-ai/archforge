@@ -275,10 +275,10 @@ str		«{stereotype}» is not applied to {name}.	«{stereotype}» ist nicht auf {
 str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» hat keine Eigenschaft {name}. Vorhanden sind: {properties}.
 str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» hat keine Eigenschaft {name}. Es gibt noch keine Eigenschaften.
 str		{name} is not a stereotype.	{name} ist kein Stereotyp.
-str		{name} is not a class diagram.	{name} ist kein Klassendiagramm.
+str		{name} is not a UML structure diagram.	{name} ist kein UML-Strukturdiagramm.
 str		Give the values as a list of texts.	Geben Sie die Werte als Liste von Texten an.
 str		No stereotype is given. Give its id.	Es ist kein Stereotyp angegeben. Geben Sie seine ID an.
-str		No class diagram is given. Give its id.	Es ist kein Klassendiagramm angegeben. Geben Sie seine ID an.
+str		No UML structure diagram is given. Give its id.	Es ist kein UML-Strukturdiagramm angegeben. Geben Sie seine ID an.
 str		No property is given. Give its name or id.	Es ist keine Eigenschaft angegeben. Geben Sie ihren Namen oder ihre ID an.
 str		This element is gone.	Dieses Element gibt es nicht mehr.
 str		{name} is a template parameter of {template} and types only its members.	{name} ist ein Template-Parameter von {template} und typisiert nur dessen Member.
@@ -576,7 +576,7 @@ str		Add end	Ende hinzufügen
 str		Draws a new leg	Zeichnet einen neuen Schenkel
 str		Reconnect end	Ende neu verbinden
 str		Drag a leg end	Ein Schenkelende ziehen
-str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
+str		Open a UML structure diagram to pick the new end's class	Öffnen Sie ein UML-Strukturdiagramm, um die Klasse des neuen Endes zu wählen
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
 str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Die Enden einer n-ären Assoziation sind keine Aggregationen: Nur eine binäre Assoziation hat ein Ganzes und ein Teil.
 str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.

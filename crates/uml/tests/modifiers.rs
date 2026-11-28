@@ -113,7 +113,7 @@ fn read(s: &mut S, class: &str, id: &str) -> Json {
 }
 
 /// A package Shop with the classes Item and Order, Order specializing Item, an enumeration Status
-/// with the literals Placed and Paid, and a class diagram: the package, the diagram, Item, Order
+/// with the literals Placed and Paid, and a UML structure diagram: the package, the diagram, Item, Order
 /// and Status.
 fn shop(s: &mut S) -> (String, String, String, String, String) {
     let pkg = run(s, "uml.package.add", json!({ "name": "Shop" }));

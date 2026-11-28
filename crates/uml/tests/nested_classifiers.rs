@@ -108,7 +108,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
 }
 
 /// A package `sales` with the classes Order and Customer, the enumeration Status and the primitive
-/// type Money, and a class diagram of `sales` showing Order: (sales, order, customer, status,
+/// type Money, and a UML structure diagram of `sales` showing Order: (sales, order, customer, status,
 /// money, diagram).
 fn shop(s: &mut S) -> [String; 6] {
     let sales = run(s, "uml.package.add", json!({ "name": "sales" }));

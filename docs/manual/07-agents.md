@@ -588,8 +588,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
 - **Diagram kinds**: `diagram_add` makes a diagram of the kind `uml.structure`, a UML structure
   diagram of a package, or `er`, an ER diagram of a schema. Any other kind, the `uml.class` of
   earlier versions among them, is refused, naming the kinds it takes, and changes nothing.
-- **Packages on a class diagram**: `diagram_place` puts any package of the model on a class
-  diagram, wherever it is owned: one of another branch, the root package, the diagram's own
+- **Packages on a UML structure diagram**: `diagram_place` puts any package of the model on a UML
+  structure diagram, wherever it is owned: one of another branch, the root package, the diagram's own
   package or one that holds it. The package is shown there and keeps its owner; nothing is copied.
   A package the diagram shows already is refused as shown already, an id that names no element of
   this project as no element, and a profile's diagram shows no package.
@@ -598,26 +598,26 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   history, or none at all is refused and changes nothing. While a drag in the window shows a
   preview, the revision given is the preview's own, which never matches: read again once the drag
   ends.
-- **A package's default diagram**: a package's first class diagram is its default from the
-  moment it is made: `diagram_add` binds it in the same undo step. A second class diagram leaves the default as it is, a profile's diagram is no one's
-  default, and a package that has class diagrams but no default gets none by adding another.
+- **A package's default diagram**: a package's first UML structure diagram is its default from the
+  moment it is made: `diagram_add` binds it in the same undo step. A second UML structure diagram leaves the default as it is, a profile's diagram is no one's
+  default, and a package that has UML structure diagrams but no default gets none by adding another.
   `uml_package_default_get` (`uml.package.default.get`) reads the
   diagram a package opens to, from the one binding that names it, never the first diagram found.
   It gives the package's id with `state` `bound` and the ids of the binding and the diagram,
-  `no_diagram_yet` for a package without a class diagram, or `does_not_apply` for a profile, which
-  has no default. A package whose binding is unsound (class diagrams but no default, more than one
-  default, a default that is gone, is no class diagram or belongs to another element) is refused
+  `no_diagram_yet` for a package without a UML structure diagram, or `does_not_apply` for a profile, which
+  has no default. A package whose binding is unsound (UML structure diagrams but no default, more than one
+  default, a default that is gone, is no UML structure diagram or belongs to another element) is refused
   with the ids concerned and what to choose. Given `expected_revision`, it answers only on that
   revision and refuses another as changed since read. It only reads. `uml_package_diagram`
   (`uml.package.diagram`) gives `{"id": …}`, the diagram a package opens to: its default, the one
   Open, ⌘↓ and zooming in reach in the window. It only reads and never makes a diagram, so its
-  answer no longer has `made`. A package with no class diagram yet is refused as having none, and
+  answer no longer has `made`. A package with no UML structure diagram yet is refused as having none, and
   one whose binding is unsound is refused as `uml_package_default_get` refuses it; make a diagram
   with `diagram_add` or choose one with `uml_package_default_set` first. A package's default diagram
   is not removed on its own: `diagram_remove` of it is refused, naming the package, unless it
   names exactly one replacement, with the `expected_revision` the project state gives: a
-  `replacement_diagram`, another of the package's class diagrams, or a `create_replacement`,
-  `{"name": …}`, a new empty class diagram of the package of that name. Then, in one undo step, the
+  `replacement_diagram`, another of the package's UML structure diagrams, or a `create_replacement`,
+  `{"name": …}`, a new empty UML structure diagram of the package of that name. Then, in one undo step, the
   new diagram is made in the model when asked for, the package's binding keeps its id and names the
   replacement, which keeps its boxes as they were, and the diagram goes; the model elements it
   showed stay. Undo takes a diagram made this way away again, never one that was there before. A package with more than one binding keeps the first, as
@@ -634,13 +634,13 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   same way: `element_remove` of a package with no parent that holds it, its own package among them,
   is refused, naming the package whose default it is, unless that package is removed in the same
   call. Choose a default of that package's own first. A nested package hands the diagram up to its
-  parent and goes. Its class diagrams join the parent's, whose default stays, so `element_remove`
-  of a nested package that has class diagrams is refused while its parent has no class diagram
+  parent and goes. Its UML structure diagrams join the parent's, whose default stays, so `element_remove`
+  of a nested package that has UML structure diagrams is refused while its parent has no UML structure diagram
   yet or its default is unsound, naming the parent. Repair the package named, then remove again:
-  with no class diagram and no binding, `diagram_add` a class diagram for it, which becomes its
-  default; with class diagrams but a default that is missing, doubled or unsound, choose one of
-  them with `uml_package_default_set`; with no class diagram of its own but a binding that names a
-  diagram that is gone or another element's, do both, in this order: `diagram_add` a class diagram
+  with no UML structure diagram and no binding, `diagram_add` a UML structure diagram for it, which becomes its
+  default; with UML structure diagrams but a default that is missing, doubled or unsound, choose one of
+  them with `uml_package_default_set`; with no UML structure diagram of its own but a binding that names a
+  diagram that is gone or another element's, do both, in this order: `diagram_add` a UML structure diagram
   for it (the binding stays as it is), read the revision again with `inspect_document`, then
   `uml_package_default_set` with the new diagram and that `expected_revision`. Removed together with its parent, or with any other package above it, it hands
   them to the first package above the highest of its own ancestors removed in the call, which is
@@ -658,11 +658,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   whatever its ends. Only relationships that went are counted; those that stay are not. One call
   that removes ER and UML elements together adds up what each took.
 - **Choosing a package's default diagram**: `uml_package_default_set`
-  (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
+  (`uml.package.default.set`) makes one of the package's own UML structure diagrams its default, given
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
-  is refused and changes nothing. Something that is no package, a diagram that is gone, is no class
-  diagram (an ER diagram, say) or belongs to another element is refused the same way. The package
-  keeps one binding, the one its first class diagram came with, or one made now for a package that
+  is refused and changes nothing. Something that is no package, a diagram that is gone, is no UML
+  structure diagram (an ER diagram, say) or belongs to another element is refused the same way. The package
+  keeps one binding, the one its first UML structure diagram came with, or one made now for a package that
   has none; it keeps its id when another diagram is chosen. It is
   also how a binding that `uml_package_default_get` refuses is mended; a package with more than one
   default keeps the first binding, now naming the chosen diagram, and the others are removed, each
@@ -733,7 +733,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   this is Archforge's rule, not UML's. `uml_relationship_rename` renames a dependency between packages in a project with no
   classifier.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
-  `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
+  `uml_constraint_show`, which shows a constraint on a UML structure diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element
   outside the model, is refused. A constraint is removed with `element_remove`.
 - **Qualifiers**: `uml_qualifier_add` qualifies one end of an association or an association class
@@ -768,7 +768,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   Order, Key -> Integer>`, and every parameter's argument, `default` true where the default is
   used. An argument of another kind, one that does not fit the parameter's constraint, a template
   parameter's own classifier, a template of another kind, a second binding of the same template and
-  a cycle of bindings are refused. Show it on a class diagram with `diagram_connect` and its text
+  a cycle of bindings are refused. Show it on a UML structure diagram with `diagram_connect` and its text
   with `diagram_label` (`kind` name). `uml_relationship_reconnect` moves its source to another
   bound element, or its target to another template whose parameters all have defaults.
   `element_remove` removes it with its substitutions; a classifier a binding uses as an argument is
@@ -776,7 +776,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   the template takes the binding along.
 - **N-ary associations**: `uml_association_add_nary` joins three to 32 classes or interfaces in one
   association (`classes`, in order; a class given twice has two ends), each end named after its
-  class and starting at `*`. On a class diagram it is a diamond: `diagram_place` with the
+  class and starting at `*`. On a UML structure diagram it is a diamond: `diagram_place` with the
   association's id, then `diagram_connect` from the diamond's node to each class's node with the
   end's id (or `diagram_connect_all`), all in one `batch` for one undo step.
   `uml_association_set_end` sets an end by its place among the ends; its role must differ from every
@@ -790,7 +790,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its
-  label somewhere on a class diagram; `uml_generalization_set_list` lists the sets of the model, of
+  label somewhere on a UML structure diagram; `uml_generalization_set_list` lists the sets of the model, of
   a class or of a generalization. Generalizations to different classes are refused. A set is
   removed with `element_remove`, which keeps its generalizations; a set left with no member goes
   with its last one. A generalization in a set cannot be reconnected until it is taken out.
@@ -830,8 +830,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   around it, each stereotype once; `uml_stereotype_unapply` takes it off with its values, the
   stereotype kept; `uml_stereotype_set_value` sets one property's `values` as text, read by the
   property's type as a default is (a literal's name for an enumeration) and checked against its
-  multiplicity, `[]` clearing them so the default shows; `uml_stereotype_show_values` turns a class
-  diagram's values compartments on or off; `uml_stereotype_list_applied` reads an element's
+  multiplicity, `[]` clearing them so the default shows; `uml_stereotype_show_values` turns a UML
+  structure diagram's values compartments on or off; `uml_stereotype_list_applied` reads an element's
   stereotypes with every property's values, `set` telling a value set from a default, and
   `uml_stereotype_applicable` every stereotype with whether it applies and why not. Removing a
   literal a value names, retyping a property whose values are set or giving it a multiplicity a set

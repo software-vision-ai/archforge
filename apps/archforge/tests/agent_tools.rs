@@ -124,14 +124,14 @@ fn the_onboarding_names_only_what_the_table_has_and_both_modes_say_the_same_scop
             if word.contains('_') {
                 assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
             } else if word.contains('.') {
-                // A command id, or a diagram kind diagram.add takes, such as the class diagram's.
+                // A command id, or a diagram kind diagram.add takes, such as the UML structure diagram's.
                 assert!(ids.contains(&word) || kinds.contains(&word), "compact {compact}: {word} is not a command");
             }
         }
         // Literals are built (AR-122), data types (AR-123), primitive types (AR-124) and
         // association classes (AR-125): an agent is told it can make them.
         for promise in [
-            "UML class diagrams",
+            "UML structure diagrams",
             "interfaces",
             "data types with their attributes and operations",
             "enumerations with their literals",

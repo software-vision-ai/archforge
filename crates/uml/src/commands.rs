@@ -356,7 +356,7 @@ fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     check_name(ctx.doc, holder_of(ctx.doc, package_of(ctx.doc, pkg)), PACKAGE, name, Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
     set_name(ctx.doc, pkg, name)?;
-    // Its class diagrams still named like it follow the new name (AR-95: a package's own diagram).
+    // Its UML structure diagrams still named like it follow the new name (AR-95: a package's own diagram).
     let follows: Vec<Obj> = ctx
         .doc
         .alive()
@@ -1391,7 +1391,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Set default diagram",
             &["Package", "Diagram"],
             None,
-            "package: string; the package's id\ndiagram: string; the id of one of the package's own class diagrams, its default from now on; the one it is already changes nothing; a package with more than one default keeps one, naming this diagram, and the others are removed\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; refused when left out or when the model changed since",
+            "package: string; the package's id\ndiagram: string; the id of one of the package's own UML structure diagrams, its default from now on; the one it is already changes nothing; a package with more than one default keeps one, naming this diagram, and the others are removed\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; refused when left out or when the model changed since",
             has_packages,
             crate::defaults::default_set
         ),

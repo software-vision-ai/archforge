@@ -237,7 +237,7 @@ fn the_sweep_finds_no_command_that_breaks_the_store_with_packages_nested() {
     let _ = Value::Null;
 }
 
-/// A package leads to its default class diagram, the one its binding names: `uml.package.diagram`
+/// A package leads to its default UML structure diagram, the one its binding names: `uml.package.diagram`
 /// refuses a package with none yet and makes nothing, then gives its first diagram, and the one
 /// `uml.package.default.set` chooses once it is chosen, though another was made first. It only
 /// reads: no undo step (AR-582). A diagram named like its package follows the package's renames.
@@ -246,7 +246,7 @@ fn a_package_leads_to_its_default_class_diagram_and_entry_never_makes_one() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
-    refused(&mut s, "uml.package.diagram", json!({ "package": orders }), "has no class diagram yet, so none opens");
+    refused(&mut s, "uml.package.diagram", json!({ "package": orders }), "has no UML structure diagram yet, so none opens");
     let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }));
     let detail = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": orders, "name": "Detail" }));
     let entered = |s: &mut S| {

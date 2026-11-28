@@ -230,10 +230,10 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &archforge_engine::R
             fmt(&tr("«{stereotype}» has no property {name}. It has no properties yet."), &[("stereotype", stereotype), ("name", name)])
         }
         Reason::NotA { kind: "stereotype", name } => fmt(&tr("{name} is not a stereotype."), &[("name", name)]),
-        Reason::NotA { kind: "class diagram", name } => fmt(&tr("{name} is not a class diagram."), &[("name", name)]),
+        Reason::NotA { kind: "UML structure diagram", name } => fmt(&tr("{name} is not a UML structure diagram."), &[("name", name)]),
         Reason::ValuesExpected => tr("Give the values as a list of texts."),
         Reason::IdEmpty { kind: "stereotype" } => tr("No stereotype is given. Give its id."),
-        Reason::IdEmpty { kind: "class diagram" } => tr("No class diagram is given. Give its id."),
+        Reason::IdEmpty { kind: "UML structure diagram" } => tr("No UML structure diagram is given. Give its id."),
         Reason::IdEmpty { kind: "property" } => tr("No property is given. Give its name or id."),
         Reason::Gone => tr("This element is gone."),
         Reason::ParameterElement { name, template } => {

@@ -275,10 +275,10 @@ str		«{stereotype}» is not applied to {name}.	«{stereotype}» não está apli
 str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» não tem a propriedade {name}. Tem {properties}.
 str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» não tem a propriedade {name}. Ainda não tem propriedades.
 str		{name} is not a stereotype.	{name} não é um estereótipo.
-str		{name} is not a class diagram.	{name} não é um diagrama de classes.
+str		{name} is not a UML structure diagram.	{name} não é um diagrama de estrutura UML.
 str		Give the values as a list of texts.	Indique os valores como uma lista de textos.
 str		No stereotype is given. Give its id.	Não foi indicado nenhum estereótipo. Indique o seu identificador.
-str		No class diagram is given. Give its id.	Não foi indicado nenhum diagrama de classes. Indique o seu identificador.
+str		No UML structure diagram is given. Give its id.	Não foi indicado nenhum diagrama de estrutura UML. Indique o seu identificador.
 str		No property is given. Give its name or id.	Não foi indicada nenhuma propriedade. Indique o seu nome ou identificador.
 str		This element is gone.	Este elemento já não existe.
 str		{name} is a template parameter of {template} and types only its members.	{name} é um parâmetro de modelo de {template} e só tipifica os membros dele.
@@ -576,7 +576,7 @@ str		Add end	Adicionar ponta
 str		Draws a new leg	Desenha um novo ramo
 str		Reconnect end	Religar ponta
 str		Drag a leg end	Arraste a ponta de um ramo
-str		Open a class diagram to pick the new end's class	Abra um diagrama de classes para escolher a classe da nova ponta
+str		Open a UML structure diagram to pick the new end's class	Abra um diagrama de estrutura UML para escolher a classe da nova ponta
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	As pontas de uma associação n-ária não são agregações, por isso Agregação não é oferecida. Repita um tipo em duas pontas quando os papéis forem diferentes.
 str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	As pontas de uma associação n-ária não são agregações: só uma associação binária tem um todo e uma parte.
 str		Another end has the role {role} already. Pick another role.	Outra ponta já tem o papel {role}. Escolha outro papel.

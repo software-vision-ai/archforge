@@ -25,7 +25,7 @@
 //! set is not removed (AR-134), nor retyped, nor given a multiplicity a set value breaks
 //! ([`reshape_refusal`]); a literal a value names is not removed ([`literal_refusal`]).
 //!
-//! Whether a class diagram shows the values of its cards' stereotypes is the diagram's own choice
+//! Whether a UML structure diagram shows the values of its cards' stereotypes is the diagram's own choice
 //! (`Show stereotype values on this diagram`), kept as Archforge's marks are kept, by a core tag, as
 //! the root package's is: the one tag named [`VALUES_TAG`] lists the diagrams that show their
 //! values; turning the last one off takes the tag away. A diagram removed leaves the list as the
@@ -53,7 +53,7 @@ type Why = (String, Option<Reason>);
 pub const MAX_APPLIED: usize = 32;
 /// The most values one property holds on one application.
 pub const MAX_VALUES: usize = 256;
-/// The name of the core tag that marks a class diagram showing its cards' stereotype values.
+/// The name of the core tag that marks a UML structure diagram showing its cards' stereotype values.
 pub const VALUES_TAG: &str = "archforge.stereotypeValues";
 
 /// Why a command is not available.
@@ -594,7 +594,7 @@ fn element_param(store: &Store, p: &Params, key: &str, kind: &'static str) -> Re
 }
 
 /// The element the id under `key` names, refused with its reason typed unless `is` says it is of
-/// `kind`: a stereotype, a class diagram or a package.
+/// `kind`: a stereotype, a UML structure diagram or a package.
 pub(crate) fn kind_param(store: &Store, p: &Params, key: &str, kind: &'static str, is: impl Fn(Obj) -> bool) -> Result<Obj, CommandError> {
     let o = element_param(store, p, key, kind)?;
     if !is(o) {
@@ -725,7 +725,7 @@ fn list_applied(ctx: &mut C<'_>, p: &Params) -> R {
         .collect();
     let mut out = json!({ "element": uuid_of(store, element)?, "keywords": keywords(store, element), "applied": items });
     if !text(p, "diagram").is_empty() {
-        let d = element_param(store, p, "diagram", "class diagram")?;
+        let d = element_param(store, p, "diagram", "UML structure diagram")?;
         out["values_shown"] = json!(values_shown(store, d));
     }
     Ok(out)
@@ -756,12 +756,12 @@ fn applicable_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "element": uuid_of(store, element)?, "takes": true, "stereotypes": items }))
 }
 
-/// `uml.stereotype.show-values`: whether a class diagram shows its cards' stereotype values, each in
+/// `uml.stereotype.show-values`: whether a UML structure diagram shows its cards' stereotype values, each in
 /// a compartment of its own under the members. Turned on, every card of the diagram with values set
 /// grows to show them (AR-241); a card without values is left as it is.
 fn show_values_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let store: &Store = ctx.doc;
-    let d = kind_param(store, p, "diagram", "class diagram", |d| {
+    let d = kind_param(store, p, "diagram", "UML structure diagram", |d| {
         let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
         store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM) && kind.as_deref() == Some(crate::STRUCTURE_DIAGRAM)
     })?;
@@ -833,7 +833,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "List applied stereotypes",
             &["Stereotype"],
             None,
-            "element: string; the element's id; its stereotypes, each with its profile and every property's values, set says whether they were set or the default shows\ndiagram: string = \"\"; a class diagram's id, to say whether it shows the values",
+            "element: string; the element's id; its stereotypes, each with its profile and every property's values, set says whether they were set or the default shows\ndiagram: string = \"\"; a UML structure diagram's id, to say whether it shows the values",
             always,
             list_applied
         ),
@@ -851,7 +851,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Show stereotype values",
             &["Stereotype", "Diagram"],
             None,
-            "diagram: string; a class diagram's id\nshow: bool; on, its cards list the values set on their stereotypes in a compartment per stereotype; off, they do not; every other diagram keeps its own choice",
+            "diagram: string; a UML structure diagram's id\nshow: bool; on, its cards list the values set on their stereotypes in a compartment per stereotype; off, they do not; every other diagram keeps its own choice",
             has_stereotypes,
             show_values_cmd
         ),

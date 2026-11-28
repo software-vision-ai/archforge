@@ -68,7 +68,7 @@ fn snapshot(s: &S) -> String {
     format!("{:?}", archforge_mof::rows::snapshot(s.doc(), &tables().0, &tables().1).unwrap())
 }
 
-/// A package with classes `names`, on a class diagram that shows the first `shown` of them.
+/// A package with classes `names`, on a UML structure diagram that shows the first `shown` of them.
 fn classes(s: &mut S, names: &[&str], shown: usize) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "sales" }));
     let d = run(s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "sales" }));
@@ -740,7 +740,7 @@ fn a_classifier_client_moved_or_nested_elsewhere_takes_its_dependencies_along() 
     assert_eq!(owner(&s, &from_line), obj(&s, &sales), "nested out, to its new package");
 }
 
-/// A dependency between two packages shown on a class diagram is drawn there as any dependency
+/// A dependency between two packages shown on a UML structure diagram is drawn there as any dependency
 /// is: dashed, with an open arrow at the supplier (AR-696).
 #[test]
 fn a_dependency_between_two_package_nodes_draws_dashed_with_an_open_arrow() {
@@ -840,7 +840,7 @@ fn the_sweep_finds_no_command_that_breaks_the_store_with_classes_related() {
 }
 
 /// A package with classes Order and Invoice and interfaces Payable and Refundable, all four on a
-/// class diagram: the package, the diagram, the classifiers' ids and their nodes, in that order.
+/// UML structure diagram: the package, the diagram, the classifiers' ids and their nodes, in that order.
 fn realizing(s: &mut S) -> (String, String, Vec<String>, Vec<String>) {
     let (pkg, d, mut ids, mut nodes) = classes(s, &["Order", "Invoice"], 2);
     for (i, name) in ["Payable", "Refundable"].into_iter().enumerate() {

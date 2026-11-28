@@ -111,7 +111,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
 }
 
 /// A package `shop` with Order, OrderLine and Product, an association `contains` from Order to
-/// OrderLine whose OrderLine end is `line`, and a class diagram of `shop` showing them.
+/// OrderLine whose OrderLine end is `line`, and a UML structure diagram of `shop` showing them.
 struct Shop {
     shop: String,
     order: String,

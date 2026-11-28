@@ -110,7 +110,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
     id
 }
 
-/// A package `shop` with Customer, Product, Catalog and Store, and two class diagrams of it,
+/// A package `shop` with Customer, Product, Catalog and Store, and two UML structure diagrams of it,
 /// Orders and Again, each showing the four classes.
 struct Shop {
     customer: String,

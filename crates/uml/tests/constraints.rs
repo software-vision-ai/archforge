@@ -113,7 +113,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
 }
 
 /// A model with a package `sales` holding the classes Order and Payment, Order with an attribute
-/// `total`, and a class diagram of `sales` showing both: (sales, order, payment, total, diagram,
+/// `total`, and a UML structure diagram of `sales` showing both: (sales, order, payment, total, diagram,
 /// order's node, payment's node).
 fn shop(s: &mut S) -> [String; 7] {
     let sales = run(s, "uml.package.add", json!({ "name": "sales" }));
@@ -276,7 +276,7 @@ fn every_constraint_rule_refused_carries_its_reason_typed() {
 
 /// The constraint commands' parameters refused carry their reason typed beside the unchanged
 /// English, under the parameter each is about: an id missing, as the id of what the parameter
-/// takes, malformed or of no element, an element that is no constraint or no class diagram, an
+/// takes, malformed or of no element, an element that is no constraint or no UML structure diagram, an
 /// element listed as no id, a place past the last, one coordinate without the other or one too far
 /// or no number, and a constraint among no element's constraints (AR-476).
 #[test]
@@ -297,7 +297,7 @@ fn every_constraint_parameter_refused_carries_its_reason_typed() {
     let empty = |kind| Reason::IdEmpty { kind };
     check(&mut s, add, json!({ "context": "", "expression": "x" }), "context", empty("element"), "\"\" is not an id");
     check(&mut s, set, json!({ "constraint": "", "name": "n" }), "constraint", empty("constraint"), "\"\" is not an id");
-    check(&mut s, show, json!({ "diagram": "", "constraint": c }), "diagram", empty("class diagram"), "\"\" is not an id");
+    check(&mut s, show, json!({ "diagram": "", "constraint": c }), "diagram", empty("UML structure diagram"), "\"\" is not an id");
     let changed = |constrained: Json| json!({ "constraint": c, "constrained": constrained });
     check(&mut s, set, changed(json!([order, ""])), "constrained", empty("element"), "\"\" is not an id");
     // An id malformed, or of no element, an element listed as no id, and elements of other kinds.
@@ -310,7 +310,14 @@ fn every_constraint_parameter_refused_carries_its_reason_typed() {
     check(&mut s, set, changed(json!([order, 7])), "constrained", ids, "every element is an id, as a string");
     let not_a = |kind, name: &str| Reason::NotA { kind, name: name.into() };
     check(&mut s, set, json!({ "constraint": order, "name": "n" }), "constraint", not_a("constraint", "Order"), "is not a constraint of this model");
-    check(&mut s, show, json!({ "diagram": order, "constraint": c }), "diagram", not_a("class diagram", "Order"), "is not a class diagram");
+    check(
+        &mut s,
+        show,
+        json!({ "diagram": order, "constraint": c }),
+        "diagram",
+        not_a("UML structure diagram", "Order"),
+        "is not a UML structure diagram",
+    );
     // A place past the last, and where it is shown: one coordinate alone, or one too far.
     let past = Reason::NoPlace { kind: "constraint", at: 3, last: 0 };
     check(&mut s, "uml.constraint.move", json!({ "constraint": c, "at": 3 }), "at", past, "3 is past the last constraint; a place from 0 to 0");

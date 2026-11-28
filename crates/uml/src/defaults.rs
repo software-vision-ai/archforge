@@ -152,7 +152,7 @@ pub(crate) fn default_get(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
     Ok(json!({ "package": uuid_of(store, package)?, "state": state, "binding": binding, "diagram": diagram }))
 }
 
-/// `uml.package.diagram`: the id of the class diagram the package under `package` opens to, its
+/// `uml.package.diagram`: the id of the UML structure diagram the package under `package` opens to, its
 /// default as [`resolve`] reads it from its one binding, the same target Open, keys and zoom
 /// reach. It only reads and never makes a diagram: a package with no structure diagram yet is
 /// refused as [`Reason::NoDiagramYet`], an unsound binding as [`Reason::InvalidBinding`] (AR-582).
@@ -164,14 +164,14 @@ pub(crate) fn entry(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result
         // A live package's default always applies, so `DoesNotApply` never comes here.
         Ok(DefaultDiagram::NoDiagramYet | DefaultDiagram::DoesNotApply) => {
             let named = name_or_id(store, package);
-            let said = format!("the package {named} has no class diagram yet, so none opens; make one for it with diagram.add first");
+            let said = format!("the package {named} has no UML structure diagram yet, so none opens; make one for it with diagram.add first");
             Err(CommandError::about("package", said).because(Reason::NoDiagramYet { package: named.into() }))
         }
         Err(problem) => Err(invalid(store, package, &problem)),
     }
 }
 
-/// `uml.package.default.set`: makes the class diagram under `diagram` the default of the package
+/// `uml.package.default.set`: makes the UML structure diagram under `diagram` the default of the package
 /// under `package`, only on the `expected_revision` its caller read, refused as
 /// [`Reason::StaleRevision`] on another or none. The diagram is a live structure diagram of that
 /// package, each refusal typed. The package's one binding is made, as a member of the project's
@@ -184,7 +184,7 @@ pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
     expected_revision(ctx, p)?;
     let store = &*ctx.doc;
     let package = kind_param(store, p, "package", "package", |o| store.class_of(o).ok() == Some(PACKAGE))?;
-    let chosen = kind_param(store, p, "diagram", "class diagram", |d| store.class_of(d).ok() == Some(DIAGRAM) && is_structure(store, d))?;
+    let chosen = kind_param(store, p, "diagram", "UML structure diagram", |d| store.class_of(d).ok() == Some(DIAGRAM) && is_structure(store, d))?;
     if store.get(chosen, diagram::ELEMENT).ok().and_then(|v| v.as_ref()) != Some(package) {
         let (d, pkg) = (name_or_id(store, chosen), name_or_id(store, package));
         let said = format!("the diagram {d} is not one of {pkg}'s own; choose one of its own structure diagrams as its default");

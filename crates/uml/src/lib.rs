@@ -78,7 +78,7 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 /// holding a diagram of the earlier `uml.class` kind is refused, never read as this one (AR-551).
 pub const STRUCTURE_DIAGRAM: &str = "uml.structure";
 
-/// The kinds of classifier a class diagram places, each a card with its members: a class, an
+/// The kinds of classifier a UML structure diagram places, each a card with its members: a class, an
 /// interface, an enumeration, whose members are its literals, a data type, a value without
 /// identity with attributes and operations as a class has, a primitive type, a value with no
 /// members at all (AR-124), and an association class, a class and an association at once, whose
@@ -94,7 +94,7 @@ pub fn is_classifier(class: ClassId) -> bool {
     CLASSIFIERS.contains(&class)
 }
 
-/// The relationships a class diagram draws as lines: associations, generalizations, dependencies,
+/// The relationships a UML structure diagram draws as lines: associations, generalizations, dependencies,
 /// interface realizations, association classes, which have a card of their own besides
 /// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new;
 /// and template bindings (AR-131), from the bound element to its template.
@@ -120,7 +120,7 @@ pub const PRIMITIVE_TYPE_SIZE: (f64, f64) = (240.0, 66.0);
 /// A package's card as it is placed: its name, and a few of what it holds.
 pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
-/// UML in a project's view: class diagrams of a package showing its
+/// UML in a project's view: UML structure diagrams of a package showing its
 /// classes, interfaces and data types as plain cards with their attributes and operations, its
 /// enumerations with their literals, its primitive types with their name alone, and the associations,
 /// generalizations, dependencies and interface realizations between them as lines (`figures`); an
@@ -142,24 +142,24 @@ impl Notation for UmlNotation {
         &[STRUCTURE_DIAGRAM]
     }
 
-    /// A class diagram is of a package, or of a profile, showing its stereotypes and the
+    /// A UML structure diagram is of a package, or of a profile, showing its stereotypes and the
     /// metaclasses they extend (AR-134).
     fn is_of(&self, _kind: &str, class: ClassId) -> bool {
         class == PACKAGE || class == PROFILE
     }
 
-    /// A class diagram is always of a package.
+    /// A UML structure diagram is always of a package.
     fn needs_element(&self, _kind: &str) -> bool {
         true
     }
 
-    /// A package's first class diagram is its default (Decision 10); a profile, though a kind of
+    /// A package's first UML structure diagram is its default (Decision 10); a profile, though a kind of
     /// package, has none (AR-579).
     fn binds_default(&self, kind: &str, class: ClassId) -> bool {
         kind == STRUCTURE_DIAGRAM && class == PACKAGE
     }
 
-    /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
+    /// A UML structure diagram shows classes, interfaces, enumerations, data types, primitive types,
     /// association classes and packages as cards, constraints as braces or notes (AR-133), and an
     /// n-ary association as its diamond (AR-128).
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
@@ -186,7 +186,7 @@ impl Notation for UmlNotation {
         }
         match store.class_of(element).ok() {
             Some(c) if c == PACKAGE => of.is_some() && constraints::in_model(store, element),
-            // A constraint shows on any class diagram: its elements may be on several.
+            // A constraint shows on any UML structure diagram: its elements may be on several.
             Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
             // An association is a node only as an n-ary one's diamond (AR-128); a binary one is a line.
             Some(c) if c == ASSOCIATION => of.is_some() && nary::is_nary(store, element),

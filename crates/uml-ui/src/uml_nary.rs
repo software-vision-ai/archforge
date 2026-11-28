@@ -688,7 +688,7 @@ pub(crate) fn add_end(cx: &mut Ctx, node: Uuid) {
 /// Arms Add end for association `a` on the open diagram: the next class clicked gets a new end.
 pub(crate) fn arm_add_end(cx: &mut Ctx, a: Uuid) {
     let Some(diagram) = cx.canvas.active else {
-        cx.panels.notice = Some(tr("Open a class diagram to pick the new end's class"));
+        cx.panels.notice = Some(tr("Open a UML structure diagram to pick the new end's class"));
         return;
     };
     cx.canvas.tool = Tool::Select;
