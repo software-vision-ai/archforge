@@ -7,10 +7,10 @@
 //! it. Each screen reaches the shell through the narrow context, never the whole shell, and draws
 //! through the design (`ux`, with the icons only ER draws).
 //!
-//! Its modules are its own. Behind the `snapshot` feature, `snapshot` lists what the screenshot
-//! tool, the app's tests and the shell's tests reach in them. It sits on the notations' screens'
-//! layer (10), above the shell's interfaces (9) and below the shell (11), and builds for the
-//! portable target.
+//! Its modules are its own. Behind the `snapshot` feature, `snapshot` lists what the app's
+//! screenshot tool and the app's tests reach in them; only the app links this crate (ADR 0004). It
+//! sits on the notations' screens' layer (10), above the shell's interfaces (9) and below the shell
+//! (11), and builds for the portable target.
 
 mod er_checks;
 mod er_connect;

@@ -7,10 +7,10 @@
 //! context, never the whole shell, and draws through the design (`ux`, with the icons only UML
 //! draws).
 //!
-//! Its modules are its own. Behind the `snapshot` feature, `snapshot` lists what the screenshot
-//! tool, the app's tests across every catalogue and the shell's tests reach in them. It sits on
-//! the notations' screens' layer (10), above the shell's interfaces (9) and below the shell (11),
-//! and builds for the portable target.
+//! Its modules are its own. Behind the `snapshot` feature, `snapshot` lists what the app's
+//! screenshot tool, its tests across every catalogue and its window tests reach in them; only the
+//! app links this crate (ADR 0004). It sits on the notations' screens' layer (10), above the
+//! shell's interfaces (9) and below the shell (11), and builds for the portable target.
 
 mod uml_adornments;
 mod uml_bindings;

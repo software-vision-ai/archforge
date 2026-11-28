@@ -7,8 +7,12 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 
 ## Placement
 - A test goes into the existing test file of its area, never a new file named after the bug:
-  - the shell and its screens: `crates/ui-egui/src/tests.rs`, on the fake notation
-    (`archforge_notations::fake` and the sketch's screens part there), never ER or UML (ADR 0005)
+  - the shell and its screens: `crates/ui-egui/src/tests.rs`, on the fake notation (its model
+    `archforge_notations::fake`, behind `archforge-notations`' feature `testing`, and the sketch's
+    screens part, `SCREENS` in that file), never ER or UML (ADR 0005); the gate's `layers` step
+    refuses a link from the shell to a notation crate and a notation's command name in its files
+    (rules 3 and 5 of `xtask/src/notation_rules.rs`)
+  - the fake notation itself, its rows saved and opened again: `crates/notations/tests/fake.rs`
   - UML's screens without the shell, what UML's own code draws or decides (its refusal words, its
     hooks, its Properties bodies and editors), against the shell's interfaces' test context:
     `crates/uml-ui/src/tests.rs`
@@ -117,7 +121,13 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 - Before proposing a change: the gate, `cargo xtask ci`. Its steps are format, lint, test, assets,
   skills, layers, portable, generated, kinds and deny. It stops at the first failure and prints a
   table of steps. It builds with `--locked` and never changes `Cargo.lock`, so there is nothing to put
-  back after it; a manifest changed without its lock fails it before the first step.
+  back after it; a manifest changed without its lock fails it before the first step. The layers
+  step runs the notation rules (`xtask/src/notation_rules.rs`, `AGENTS.md`, "Notations are
+  plugins"), and a test's link counts as a production one: a link to a model crate from any crate
+  but `archforge-notations`, that notation's screens crate or the app fails it, so does a link to
+  a screens crate from any crate but the app, and so does a notation's command name in a test of
+  the shell, its interfaces, the project store or the command-line tool. Such a test belongs in
+  the app's tests (ADR 0005).
 - The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
   server and project tests fail and say so. A test that starts a server stops it on every path,
   so a failed run leaves no server behind: in the app, every test over the real project host

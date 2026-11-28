@@ -9,7 +9,7 @@ repository.workspace = true
 publish = false
 
 [features]
-# What the screenshot tool, the app's catalogue tests and the shell's tests reach in UML's screens
+# What the app's screenshot tool, its catalogue tests and its window tests reach in UML's screens
 # (`archforge_uml_ui::snapshot`): the sample builders, the word lists and the items they name;
 # never shipped.
 snapshot = ["dep:archforge-notations"]

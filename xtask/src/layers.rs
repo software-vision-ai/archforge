@@ -44,27 +44,39 @@ pub const TABLE: &[(&str, Class)] = &[
     // which asks each notation about its own diagrams and elements; knows no notation. Diagrams are
     // members of the core's Model, so it sits above the core.
     ("diagram", Class::Layer(6)),
+    // The notations' model crates, on `notation_rules::MODEL_LAYER` (ADR 0002): each has its
+    // screens crate on layer 10, and only archforge-notations, that screens crate and the app link
+    // it, in production or in tests (`notation_rules`, rules 1 and 4; ADR 0004).
     // UML: its metamodel generated from OMG's XMI, its commands on the MOF core, its class diagrams
     // in the project's view.
     ("uml", Class::Layer(7)),
     // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.
     ("er", Class::Layer(7)),
     // The notations a project holds, composed into one store, one command table and one set of
-    // tables: the one crate above the notations that names them all.
+    // tables: the one crate above the notations that names them all, the model registry (ADR 0003).
     ("notations", Class::Layer(8)),
     // The interface's layers, 9 to 11, which hold no process or network code (`shell_io`). The
-    // shell's interfaces: what a notation's screens implement and may use from the shell (ADR 0003).
+    // shell's interfaces: what a notation's screens implement and may use from the shell (ADR
+    // 0003); a shared crate, which links no notation crate and names no notation command
+    // (`notation_rules`, rules 3 and 5; ADR 0004).
     ("shell-api", Class::Layer(9)),
-    // Layer 10 is the notations' screens crates' (ADR 0002), each above the shell's interfaces:
-    // ER's and UML's, each of which depends on its notation's model, the shell's interfaces and the
-    // crates below them.
+    // Layer 10 is the notations' screens crates' (ADR 0002), `notation_rules::SCREENS_LAYER`, each
+    // above the shell's interfaces: ER's and UML's, each of which depends on its notation's model,
+    // the shell's interfaces and the crates below them; only the app links one (`notation_rules`,
+    // rule 2; ADR 0004).
     ("er-ui", Class::Layer(10)),
     ("uml-ui", Class::Layer(10)),
+    // The shell: a shared crate, which links no notation crate, in production or in tests, and
+    // names no notation command; its tests use the fake notation (`notation_rules`, rules 3 and 5;
+    // ADR 0004, ADR 0005).
     ("ui-egui", Class::Layer(11)),
     // Host services, for the desktop only: the application uses them and they sit above the shell,
     // so the shell never depends on them and the portable-target check, which builds the layers
     // below the shell, leaves them out.
     ("dolt", Class::Layer(12)),
+    // The project store, a host service too, and a shared crate like the shell: it links no
+    // notation crate and names no notation command; its tests use the fake notation
+    // (`notation_rules`, rules 3 and 5; ADR 0005).
     ("project", Class::Layer(13)),
     // Agent access: the control channel's token, loopback server and client, and the MCP server
     // bridged to it. Host services like the two above, never built for the portable target.

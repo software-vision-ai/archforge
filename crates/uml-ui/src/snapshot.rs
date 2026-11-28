@@ -1,4 +1,4 @@
-//! What the screenshot tool, the app's tests across every catalogue and the shell's tests reach in
+//! What the app's screenshot tool, its tests across every catalogue and its window tests reach in
 //! UML's screens, behind the `snapshot` feature: the sample builders, which make the sample model
 //! and stage UML's screens through the narrow context; the words UML hands its lookups through a
 //! table ([`word_lists`]); and the items of UML's own modules they name, each under its module's
