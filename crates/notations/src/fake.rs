@@ -13,7 +13,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, al
 use archforge_mof::schema::{Column, Junction, Table};
 use archforge_mof::toy::{
     ASSOCIATION, ASSOCIATION_MEMBER_END, ASSOCIATION_OWNED_END, CLASS, CLASS_FEATURE, CLASS_GENERALIZATION, CLASS_IS_ABSTRACT, CLASS_OWNED_ATTRIBUTE,
-    CLASS_OWNED_OPERATION, COMMENT, COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX,
+    CLASS_OWNED_OPERATION, COMMENT, COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX, LITERAL_INTEGER, LITERAL_INTEGER_VALUE, LITERAL_UNLIMITED_NATURAL, LITERAL_UNLIMITED_VALUE,
     MULTIPLICITY_IS_ORDERED, MULTIPLICITY_IS_UNIQUE, MULTIPLICITY_LOWER_VALUE, MULTIPLICITY_UPPER_VALUE, NAMED_ELEMENT_NAME, OPERATION,
     OPERATION_OWNED_PARAMETER, PACKAGE, PACKAGE_PACKAGED_ELEMENT, PROPERTY, PROPERTY_AGGREGATION, PROPERTY_ASSOCIATION, PROPERTY_CLASS,
     TYPED_ELEMENT_TYPE, ToySlabs,
@@ -46,7 +46,7 @@ static VIEWS: &[&dyn Notation] = &[&Sketch];
 /// The id column every table starts with.
 const ID: Column = Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" };
 
-/// One table for each class the notation makes.
+/// One table for each class the notation makes, and for the literals a multiplicity's bounds are.
 const TABLES: &[Table] = &[
     Table { name: "sketch_package", class: PACKAGE, columns: &[ID, Column { name: "name", prop: Some(NAMED_ELEMENT_NAME), sql: "MEDIUMTEXT NULL" }] },
     Table {
@@ -90,6 +90,16 @@ const TABLES: &[Table] = &[
         columns: &[ID, Column { name: "name", prop: Some(NAMED_ELEMENT_NAME), sql: "MEDIUMTEXT NULL" }],
     },
     Table { name: "sketch_comment", class: COMMENT, columns: &[ID, Column { name: "body", prop: Some(COMMENT_BODY), sql: "MEDIUMTEXT NULL" }] },
+    Table {
+        name: "sketch_literal_integer",
+        class: LITERAL_INTEGER,
+        columns: &[ID, Column { name: "value", prop: Some(LITERAL_INTEGER_VALUE), sql: "BIGINT NOT NULL" }],
+    },
+    Table {
+        name: "sketch_literal_unlimited_natural",
+        class: LITERAL_UNLIMITED_NATURAL,
+        columns: &[ID, Column { name: "value", prop: Some(LITERAL_UNLIMITED_VALUE), sql: "BIGINT NOT NULL" }],
+    },
 ];
 
 /// One list table for each list the notation fills.
@@ -110,6 +120,14 @@ const JUNCTIONS: &[Junction] = &[
     Junction { name: "sketch_association_owned_comment", class: ASSOCIATION, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "sketch_comment_owned_comment", class: COMMENT, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "sketch_comment_annotated_element", class: COMMENT, prop: COMMENT_ANNOTATED_ELEMENT, ordered: false, reference: true },
+    Junction { name: "sketch_literal_integer_owned_comment", class: LITERAL_INTEGER, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction {
+        name: "sketch_literal_unlimited_natural_owned_comment",
+        class: LITERAL_UNLIMITED_NATURAL,
+        prop: ELEMENT_OWNED_COMMENT,
+        ordered: false,
+        reference: true,
+    },
 ];
 
 /// The fake notation: packages of classes, each sketched as a card with its attributes and its
@@ -248,8 +266,12 @@ impl Notation for Sketch {
         Ok(standing.removed(store, gone))
     }
     /// Keeps the description as the body of the element's first owned comment, made for it; an
-    /// empty text clears it.
+    /// empty text clears it, and one with a control character other than a line break or a tab
+    /// is refused.
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), CommandError> {
+        if text.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+            return Err(CommandError::about("text", "the text holds a control character").because(Reason::ControlCharacter));
+        }
         let held = described(store, obj);
         let comment = match held {
             Some(c) => c,
@@ -341,15 +363,16 @@ fn answer(ctx: &C<'_>, obj: Obj) -> R {
     Ok(json!({ "id": ctx.doc.uuid(obj).map_err(fail)?.to_string() }))
 }
 
-/// Refuses an empty name under `key`, and one another element of `list` of `owner` has.
-fn named(ctx: &C<'_>, key: &str, name: &str, owner: Obj, list: PropId, except: Option<Obj>) -> Result<(), CommandError> {
+/// Refuses an empty name under `key`, and one another element of `list` of `owner` has, naming the
+/// element of `kind` that has it.
+fn named(ctx: &C<'_>, key: &str, name: &str, owner: Obj, list: PropId, except: Option<Obj>, kind: &'static str) -> Result<(), CommandError> {
     if name.trim().is_empty() {
         return Err(CommandError::about(key, "a name is needed").because(Reason::NameEmpty));
     }
     let taken = ctx.doc.list(owner, list).map_err(fail)?.iter().filter_map(Value::as_ref).any(|o| {
         Some(o) != except && ctx.doc.get(o, NAMED_ELEMENT_NAME).ok().and_then(|v| v.as_str().map(str::to_lowercase)) == Some(name.to_lowercase())
     });
-    if taken { Err(CommandError::about(key, format!("{name:?} is taken"))) } else { Ok(()) }
+    if taken { Err(CommandError::about(key, format!("{name:?} is taken")).because(Reason::NameTaken { kind, name: name.to_string() })) } else { Ok(()) }
 }
 
 /// The project's model root.
@@ -379,7 +402,7 @@ fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
 fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     let m = model(ctx)?;
-    named(ctx, "name", name, m, archforge_core::model::MEMBER, None)?;
+    named(ctx, "name", name, m, archforge_core::model::MEMBER, None, "package")?;
     let o = ctx.doc.create(PACKAGE).map_err(fail)?;
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(o)).map_err(fail)?;
@@ -391,7 +414,7 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let o = id_of(ctx, p, "package", PACKAGE)?;
     let name = text(p, "name");
-    named(ctx, "name", name, model(ctx)?, archforge_core::model::MEMBER, Some(o))?;
+    named(ctx, "name", name, model(ctx)?, archforge_core::model::MEMBER, Some(o), "package")?;
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     answer(ctx, o)
 }
@@ -409,7 +432,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
 fn class_add(ctx: &mut C<'_>, p: &Params) -> R {
     let package = id_of(ctx, p, "package", PACKAGE)?;
     let name = text(p, "name");
-    named(ctx, "name", name, package, PACKAGE_PACKAGED_ELEMENT, None)?;
+    named(ctx, "name", name, package, PACKAGE_PACKAGED_ELEMENT, None, "class")?;
     let o = ctx.doc.create(CLASS).map_err(fail)?;
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     ctx.doc.push(package, PACKAGE_PACKAGED_ELEMENT, Value::Ref(o)).map_err(fail)?;
@@ -422,7 +445,7 @@ fn class_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let o = id_of(ctx, p, "class", CLASS)?;
     let name = text(p, "name");
     if let Some((package, _)) = ctx.doc.container(o).map_err(fail)? {
-        named(ctx, "name", name, package, PACKAGE_PACKAGED_ELEMENT, Some(o))?;
+        named(ctx, "name", name, package, PACKAGE_PACKAGED_ELEMENT, Some(o), "class")?;
     }
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     answer(ctx, o)
@@ -450,7 +473,7 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let class = id_of(ctx, p, "class", CLASS)?;
     let name = text(p, "name");
-    named(ctx, "name", name, class, CLASS_OWNED_ATTRIBUTE, None)?;
+    named(ctx, "name", name, class, CLASS_OWNED_ATTRIBUTE, None, "attribute")?;
     let o = ctx.doc.create(PROPERTY).map_err(fail)?;
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     ctx.doc.push(class, CLASS_OWNED_ATTRIBUTE, Value::Ref(o)).map_err(fail)?;
@@ -461,7 +484,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     let class = id_of(ctx, p, "class", CLASS)?;
     let name = text(p, "name");
-    named(ctx, "name", name, class, CLASS_OWNED_OPERATION, None)?;
+    named(ctx, "name", name, class, CLASS_OWNED_OPERATION, None, "operation")?;
     let o = ctx.doc.create(OPERATION).map_err(fail)?;
     ctx.doc.set(o, NAMED_ELEMENT_NAME, Value::str(name)).map_err(fail)?;
     ctx.doc.push(class, CLASS_OWNED_OPERATION, Value::Ref(o)).map_err(fail)?;

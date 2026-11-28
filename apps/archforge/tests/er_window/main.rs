@@ -1137,3 +1137,38 @@ fn keyed_alone(shell: &mut Shell, keys: &[egui::Key], modifiers: egui::Modifiers
     out.textures_delta.clear();
     took
 }
+
+/// The Diagrams explorer's rows: each one's depth, name and count.
+fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_ui_egui::diagrams::rows(st, &h.state().diagrams, h.state().kinds).rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect()
+}
+
+/// A project to delete diagrams in (AR-644): the package Sales with its own default diagram and a
+/// second one, Sales details, showing the class Order, and the schema Shop's ER diagram; Sales and
+/// then Sales details open in tabs, the Diagrams explorer showing. Gives Order and the diagrams.
+fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_mof::Uuid; 4]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let made = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let default = own_diagram(s, sales);
+        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+        let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales details" });
+        let details = id(s.execute("diagram.add", &p).unwrap().value);
+        let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
+        s.execute("diagram.place", &place).unwrap();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let shop = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema.to_string(), "name": "Shop" }))
+            .unwrap()
+            .value);
+        [order, default, details, shop]
+    };
+    archforge_ui_egui::canvas::open(h.state_mut(), made[1]);
+    archforge_ui_egui::canvas::open(h.state_mut(), made[2]);
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    (h, made)
+}
