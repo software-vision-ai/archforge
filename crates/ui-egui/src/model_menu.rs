@@ -4,7 +4,6 @@
 //! ([`crate::kinds::DiagramKind::menu_rows`]), from which the menu makes its entries: each answers
 //! the table of actions by its id ([`label`], [`available`], [`run`]).
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::actions::free;
 use crate::canvas::Tool;

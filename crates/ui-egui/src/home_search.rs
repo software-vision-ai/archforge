@@ -7,18 +7,13 @@
 //! list.
 
 use craft_i18n::Folded;
-#[cfg(any())] // AR-796 parked
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 pub(crate) use archforge_shell_api::search::{Typed, fold, joins, starts};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
-#[cfg(any())] // AR-796 parked
 use crate::home::control;
-#[cfg(any())] // AR-796 parked
 use crate::i18n::tr;
-#[cfg(any())] // AR-796 parked
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -52,7 +47,6 @@ pub struct Search {
 
 /// A project found in a pinned folder, as its row shows it: where it is, its name, where it lives
 /// from its pinned folder down, and all three folded for matching.
-#[cfg(any())] // AR-796 parked
 #[derive(Debug)]
 struct Found {
     path: std::path::PathBuf,
@@ -81,7 +75,6 @@ enum Target {
 }
 
 /// A row of the list: what it runs, its icon, its name and the line beside it.
-#[cfg(any())] // AR-796 parked
 struct Hit {
     target: Target,
     icon: &'static ux::Icon,
@@ -185,7 +178,6 @@ pub(crate) fn close(shell: &mut Shell) {
 /// The rows for the query: the matching recent projects, then the projects in the pinned folders
 /// not among them, the pinned folders and the actions, in that order, each while it can run; with
 /// no query, all of them.
-#[cfg(any())] // AR-796 parked
 fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
     let mut groups = Vec::new();
     let typed = Typed::words(query);
@@ -252,7 +244,6 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
 }
 
 /// What Home can do now, worded for the state it is in.
-#[cfg(any())] // AR-796 parked
 fn actions(shell: &Shell) -> Vec<Hit> {
     let rows = crate::actions::ACTIONS.iter().filter_map(|a| Some((a, a.search.as_ref()?)));
     rows.filter(|(a, _)| (a.available)(shell))
@@ -288,8 +279,6 @@ fn run(shell: &mut Shell, target: Target) {
 
 /// The field in the bar at `field`, with its placeholder and shortcut while closed, the query
 /// and its list while open.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect, placeholder: &str, prefix: &str) {
     let paint = ui.painter().clone();
     let mid = field.center().y;
@@ -400,10 +389,6 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
 }
 
 /// The list under the field, its rows grouped under their headings; a click elsewhere closes it.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(String, Vec<Hit>)], id: &str) {
     let rows = groups.iter().map(|(_, h)| h.len()).sum::<usize>() as f32;
     let height = if groups.is_empty() { 52.0 } else { 8.0 + groups.len() as f32 * 28.0 + rows * ROW };

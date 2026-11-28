@@ -10,7 +10,6 @@ use egui::text_edit::TextEditState;
 use egui::text_selection::LabelSelectionState;
 use egui::{Event, Key, Modifiers};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::actions::free;
 

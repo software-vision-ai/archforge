@@ -15,7 +15,6 @@ use archforge_shell_api::notation_ui::NotationStates;
 use crate::chat_words::Clock;
 use crate::new_project::Dialog;
 use crate::ux::Colour;
-#[cfg(any())] // AR-796 parked
 use crate::{CreateError, Shell, VersionEntry, VersionsPage};
 
 /// Runs `f` with the narrow context over `shell`'s parts, then carries out the requests `f` made,

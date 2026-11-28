@@ -7,7 +7,6 @@ use archforge_notations::differences::{CardList, ElementSides, ListKind, ListRow
 use egui::{CornerRadius, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use super::{related, summary};
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::explorer::scroll_tree;
 use crate::i18n::{fmt, tr};

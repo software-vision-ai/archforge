@@ -14,7 +14,6 @@ use archforge_mof::rows::{Cell, Rows};
 
 use crate::hold::HoldRefused;
 use crate::i18n::tr;
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, VersionRead, VersionReadError};
 
 /// The most versions the cache holds: the design's last few.

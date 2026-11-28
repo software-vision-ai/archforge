@@ -20,7 +20,6 @@ use crate::ai_agents::{
 use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, Tone, badge, button, control, focus_ring, icon_button, wrapped};
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The page's longest sentences, looked up through `tr` by name; the catalogue test reads them
@@ -157,7 +156,6 @@ fn device_code_hint(minutes: u32) -> String {
 }
 
 /// An account error in a sentence's words.
-#[cfg(any())] // AR-796 parked
 fn account_error(e: &AccountError) -> String {
     match e {
         AccountError::NotAvailableYet => tr("Not available yet"),
@@ -311,7 +309,6 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
 }
 
 /// The badge under Check connection and Send test message: what the last of them found.
-#[cfg(any())] // AR-796 parked
 fn outcome(shell: &Shell) -> Option<(String, Tone)> {
     if shell.agents.checking() {
         return Some((tr("Checking…"), Tone::Quiet));
@@ -387,7 +384,6 @@ fn no_store(ui: &egui::Ui, p: &Palette, why: &str, left: f32, y: f32, width: f32
 }
 
 /// The card's badge: what was found of the program, or Codex's expired sign-in.
-#[cfg(any())] // AR-796 parked
 fn card_badge(shell: &Shell, agent: Provider) -> (String, Tone) {
     let program = agent.program();
     match shell.agents.look.program(agent) {
@@ -537,7 +533,6 @@ fn install(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, agent: Provider, p
 /// An agent's API key: the hidden field and Save key, or the saved key masked to its last four
 /// with Replace and Remove; the line under it says where it is kept or what went wrong. Gives
 /// where it ends.
-#[cfg(any())] // AR-796 parked
 fn key_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut Page, agent: Provider, x: f32, y: f32, inner: f32) -> f32 {
     let paint = ui.painter().clone();
     let i = slot(agent);
@@ -730,7 +725,6 @@ fn key_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut Page,
 
 /// Codex's sign-in: the two ways, then the ChatGPT sign-in's row (or the device code while a
 /// sign-in runs) or the API key. Gives where it ends.
-#[cfg(any())] // AR-796 parked
 fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut Page, x: f32, y: f32, inner: f32) -> f32 {
     let paint = ui.painter().clone();
     let store_missing = shell.agents.look.store.missing();

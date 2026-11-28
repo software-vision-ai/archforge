@@ -12,7 +12,6 @@ use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
 use crate::leaving::{Cleared, Leaving};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, canvas, diagrams, explorer, panels};
 
 /// The version being viewed and everything set aside for going back.

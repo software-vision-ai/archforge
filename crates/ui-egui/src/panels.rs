@@ -29,7 +29,6 @@ use crate::i18n::{fmt, tr};
 use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// What is left under the last control of a scrolled body, for its trailing text.
@@ -527,7 +526,6 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 
 /// Draws the panel body for `panel` under its header, from `y`: Properties and Skills follow the
 /// selection; Chat holds the project's conversations; Appearance says what is true.
-#[cfg(any())] // AR-796 parked
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);

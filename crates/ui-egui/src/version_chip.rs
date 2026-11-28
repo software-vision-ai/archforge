@@ -5,22 +5,16 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-#[cfg(any())] // AR-796 parked
 use egui::{Key, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::chat_words::{Clock, civil, clock_time, local, month};
-#[cfg(any())] // AR-796 parked
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::hold::HoldRefused;
-#[cfg(any())] // AR-796 parked
 use crate::home::{SEARCH_MIN, control};
 use crate::i18n::{fmt, tr, tr_ctx};
-#[cfg(any())] // AR-796 parked
 use crate::settings::{Look, button};
-#[cfg(any())] // AR-796 parked
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
-#[cfg(any())] // AR-796 parked
 use crate::{BranchEntry, Shell, VersionEntry, VersionsPage};
 
 /// The versions one read brings, for the list and the steps alike.
@@ -42,8 +36,6 @@ const BRANCH_GAP: f32 = 16.0;
 const NAME_MIN: f32 = 40.0;
 
 /// The list's state between frames.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 #[derive(Default)]
 pub struct List {
     project: Option<PathBuf>,
@@ -120,7 +112,6 @@ pub(crate) fn open(shell: &mut Shell) {
 }
 
 /// Once a frame: a list whose project is no longer shown, or that a hold or dialog now bars, closes.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn keep_valid(shell: &mut Shell) {
     let path = shell.project.as_ref().map(|o| o.path.clone());
     let steps = &shell.version_list.steps;
@@ -137,14 +128,12 @@ pub(crate) fn keep_valid(shell: &mut Shell) {
 }
 
 /// Closes the list; what it read goes with it.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn close(shell: &mut Shell) {
     let steps = std::mem::take(&mut shell.version_list.steps);
     shell.version_list = List { shown: shell.version_list.shown.take(), steps, ..List::default() };
 }
 
 /// A save finished: a version may have been made, so what the list and the steps read is old.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn saved(shell: &mut Shell) {
     close(shell);
     shell.version_list.steps = Steps::default();
@@ -169,8 +158,6 @@ pub(crate) fn branch_name(shell: &Shell) -> Option<String> {
 }
 
 /// ⇧⌘B: the list, showing the branches.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 pub(crate) fn open_branches(shell: &mut Shell) {
     open(shell);
     if shell.version_list.project.is_some() {
@@ -179,7 +166,6 @@ pub(crate) fn open_branches(shell: &mut Shell) {
 }
 
 /// The list shows the branches, from the first, unfiltered.
-#[cfg(any())] // AR-796 parked
 fn show_branches(shell: &mut Shell) {
     let l = &mut shell.version_list;
     (l.branches, l.highlight, l.on_new, l.filter, l.scroll) = (true, 0, false, String::new(), TreeScroll::default());
@@ -392,7 +378,6 @@ fn rows(shell: &Shell) -> Vec<Row> {
 }
 
 /// Runs a row and closes the list, or lists the branches.
-#[cfg(any())] // AR-796 parked
 fn pick(shell: &mut Shell, (pick, label, _): Row) {
     match pick {
         Pick::Version(hash) => {
@@ -455,7 +440,6 @@ fn chip_words(shell: &Shell) -> (String, String) {
 /// The chip left of search and its list; gives where search starts. Before search goes, the
 /// branch's name truncates, then the label goes, then it is one icon; without room for search as
 /// well it sits against Help.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start: f32, end: f32) -> f32 {
     let width = match (shell.version_in_view(), shell.shown_unsaved()) {
         (Some(_), _) => 282.0,
@@ -495,7 +479,6 @@ pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start
 }
 
 /// Opens the list, or closes it when it is open.
-#[cfg(any())] // AR-796 parked
 fn toggle_list(shell: &mut Shell) {
     if shell.version_list.project.is_some() { close(shell) } else { open(shell) }
 }
@@ -510,7 +493,6 @@ fn chip_icon(shell: &Shell, paint: &egui::Painter, p: &Palette, at: egui::Pos2) 
 
 /// The chip at its narrowest: its icon, untinted even while viewing, and a dot for unsaved work;
 /// the whole label in its tooltip and accessible name, and a click opens the list.
-#[cfg(any())] // AR-796 parked
 fn icon_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(r, 8.0, p.surface);
@@ -529,7 +511,6 @@ fn icon_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 
 /// The chip: the branch's name in `branch`'s width, what shows unless `label` is off, a dot for
 /// unsaved work. Viewing, the steps and the way back.
-#[cfg(any())] // AR-796 parked
 fn chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, branch: Option<(String, f32)>, label: bool) {
     let ((whole, text), viewing, mid, paint) = (chip_words(shell), shell.version_in_view().is_some(), r.center().y, ui.painter().clone());
     paint.rect_filled(r, 8.0, if viewing { p.accent_tint } else { p.surface });
@@ -563,7 +544,6 @@ fn chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, branch: Option<(
 
 /// The chip while a version shows: the branch's name, the steps round its date, which opens the
 /// list, and the way back.
-#[cfg(any())] // AR-796 parked
 fn viewing_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mut r: Rect, (label, date): (&str, &str), branch: Option<(String, f32)>) {
     let (mid, paint) = (r.center().y, ui.painter().clone());
     if let Some((branch, shown)) = branch {
@@ -623,7 +603,6 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
 /// modifier they are the filter field's, as Shift with ↓ selects to its end (`actions::take_alone`).
 /// Enter keeps Shift and Alt on purpose: the field would end its input on them too and drop the
 /// keyboard. With Control or the command key no key acts.
-#[cfg(any())] // AR-796 parked
 fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], new: bool) -> bool {
     let press = |key| ui.input_mut(|i| crate::actions::take_alone(i, key));
     let enter = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter));
@@ -658,7 +637,6 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], new: bool) -> bool {
 
 /// The field that narrows the list as it is typed. It keeps the keyboard while the list is open,
 /// so no key meant for it reaches the window behind.
-#[cfg(any())] // AR-796 parked
 fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(field, 14.0, p.page);
@@ -687,7 +665,6 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 }
 
 /// Under the rows: what could not be read, the newest versions or the next ones, and Retry for it.
-#[cfg(any())] // AR-796 parked
 fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let first = shell.version_list.steps.history.is_empty();
     let words = failure_words(first);
@@ -708,7 +685,6 @@ fn new_row() -> Row {
 
 /// New branch… under the rows and what fails or is cut under them, set apart by a line, at the
 /// foot of the list `r`, highlighted under the keys or the pointer; true when clicked.
-#[cfg(any())] // AR-796 parked
 fn new_branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
     let at = Rect::from_min_size(pos2(r.left() + 6.0, r.bottom() - 6.0 - ROW), vec2(WIDTH - 12.0, ROW));
     ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 1.0, at.top() - 4.0), pos2(r.right() - 1.0, at.top() - 3.0)), 0.0, p.border);
@@ -725,7 +701,6 @@ fn new_branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> boo
 
 /// The list under the chip: the filter, the rows the wheel and the keys move through, reading on
 /// as the end comes into view, and what could not be read.
-#[cfg(any())] // AR-796 parked
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
     let rows = rows(shell);
     let new = crate::branch_ask::offered(shell);

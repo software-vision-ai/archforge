@@ -8,7 +8,6 @@
 
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::ai_agents::Provider;
 use crate::chat::FailureKind;
@@ -125,7 +124,6 @@ fn quiet_button(
 }
 
 /// Draws the panel's body under its header, from `y`.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     crate::chat_panel::showing(shell);
     let body = Rect::from_min_max(pos2(r.left(), r.top() + y - 14.0), r.max);

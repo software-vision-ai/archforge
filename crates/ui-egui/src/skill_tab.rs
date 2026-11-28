@@ -18,7 +18,6 @@ use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::markdown::{self, Format};
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// How long typing pauses before the text is kept, in seconds.
@@ -176,7 +175,6 @@ fn place(store: &Store, s: Obj) -> String {
 
 /// Above the text: the name as the title with the bin at its right, and where the skill sits.
 /// Gives the y under them.
-#[cfg(any())] // AR-796 parked
 #[allow(clippy::too_many_arguments)]
 fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f32, mut y: f32, i: usize, s: Obj) -> f32 {
     let paint = ui.painter().clone();
@@ -437,7 +435,6 @@ fn site_of(url: &str) -> String {
 
 /// The confirmation over the page before a link opens: the address in full, Cancel and Open.
 /// Esc cancels; nothing opens without the click on Open.
-#[cfg(any())] // AR-796 parked
 fn confirm_link(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rect, i: usize) {
     let Some(url) = shell.canvas.skills[i].link.clone() else { return };
     let prefix = format!("workspace.skill.link.{}", shell.canvas.skills[i].skill);

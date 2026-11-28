@@ -4,7 +4,6 @@
 
 use egui::{Rect, pos2};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::actions::{Action, FIND, free};
 use crate::canvas::{self, ZOOM_STEP};

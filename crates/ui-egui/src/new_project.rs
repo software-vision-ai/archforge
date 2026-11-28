@@ -20,15 +20,11 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use archforge_names::Problem;
-#[cfg(any())] // AR-796 parked
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
-#[cfg(any())] // AR-796 parked
 use ux::Colour;
 
 use crate::i18n::{fmt, tr};
-#[cfg(any())] // AR-796 parked
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{CreateError, Opened, Shell, widgets};
 
 const WIDTH: f32 = 760.0;
@@ -208,7 +204,6 @@ fn answer(dialog: &mut Dialog) -> Option<Result<Opened, CreateError>> {
 
 /// Draws the dialog over everything when it is open, and closes it on Cancel, the close button or
 /// Escape.
-#[cfg(any())] // AR-796 parked
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     // As Home, the dialog waits for the design's faces, which arrive at the end of the first frame.
     if shell.new_project.is_none() || !ux::ready(ui.ctx()) {
@@ -274,7 +269,6 @@ fn let_go_of_change(shell: &mut Shell) {
 }
 
 /// A control's hit area, recorded for automation; one that is not built yet says so on hover.
-#[cfg(any())] // AR-796 parked
 fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response {
     widgets::record_visible(ui, &mut shell.registry, id, kind, rect);
     let resp = ui.interact(rect, widgets::egui_id(id), Sense::click());
@@ -282,7 +276,6 @@ fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect:
 }
 
 /// The icon, the title and its line, and the close button; gives whether it was clicked.
-#[cfg(any())] // AR-796 parked
 fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, live: bool) -> bool {
     let paint = ui.painter();
     let at = |x: f32, y: f32| frame.min + vec2(x, y);
@@ -303,7 +296,6 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, live: bool
 }
 
 /// The body between the header and the footer, scrolling when the window is too small for it.
-#[cfg(any())] // AR-796 parked
 fn body_scroll(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, dialog: &mut Dialog) {
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
     child.set_clip_rect(body.intersect(ui.clip_rect()));
@@ -317,7 +309,6 @@ fn body_scroll(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, di
 }
 
 /// The name, the location, the diagrams line, whole, and the strip below it; gives their height.
-#[cfg(any())] // AR-796 parked
 fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inner: f32, dialog: &mut Dialog) -> f32 {
     let at = |y: f32| pos2(origin.x, origin.y + y);
     let paint = ui.painter().clone();
@@ -469,7 +460,6 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
 
 /// The divider, Cancel and Create project; gives whether Cancel was clicked, and starts a creation
 /// when Create project is.
-#[cfg(any())] // AR-796 parked
 fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &mut Dialog) -> bool {
     let paint = ui.painter();
     paint.rect_filled(Rect::from_min_size(pos2(frame.left(), frame.bottom() - FOOTER), vec2(frame.width(), 1.0)), 0.0, p.border);
@@ -500,7 +490,6 @@ fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &m
 
 /// `words` as a sentence lists them in the language in use: one alone, two joined by "and", more
 /// with commas between them and "and" before the last; none when there are none.
-#[cfg(any())] // AR-796 parked
 fn listed(words: &[String]) -> Option<String> {
     let (last, before) = words.split_last()?;
     let Some((first, middle)) = before.split_first() else { return Some(last.clone()) };
@@ -509,7 +498,6 @@ fn listed(words: &[String]) -> Option<String> {
 }
 
 /// Draws `label` in the strong interface style and `color`, centred in `r` and cut to its width.
-#[cfg(any())] // AR-796 parked
 fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Colour) {
     let g = ux::galley(paint, label, types::UI_STRONG, color, Some(r.width() - 8.0));
     paint.galley(r.center() - g.size() / 2.0, g, color.into());

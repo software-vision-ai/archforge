@@ -15,7 +15,6 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::{fmt, tr};
 use crate::leaving::{Cleared, Leaving};
-#[cfg(any())] // AR-796 parked
 use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.

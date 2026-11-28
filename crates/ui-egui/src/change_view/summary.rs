@@ -10,7 +10,6 @@ use archforge_notations::differences::{CardField, ElementCard, ElementSides, Lis
 use egui::{Galley, Rect, Stroke, StrokeKind, pos2};
 
 use super::cards::worded;
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
 use crate::model_words::{kind_label, property_label};

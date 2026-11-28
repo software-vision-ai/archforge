@@ -9,7 +9,6 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::close_ask::Ask;
-#[cfg(any())] // AR-796 parked
 use crate::{Opened, Shell, chat_panel};
 
 /// The most seconds Chat may take to settle for a hold, past a turn's own grace to stop.

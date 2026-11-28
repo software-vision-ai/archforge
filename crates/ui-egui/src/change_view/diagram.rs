@@ -2,43 +2,28 @@
 //! the layout, said apart, then each side drawn from its own state in one shared framing, so a box
 //! that stayed is in the same place on both, with what differs marked.
 
-#[cfg(any())] // AR-796 parked
 use std::collections::{BTreeMap, HashMap};
 
-#[cfg(any())] // AR-796 parked
 use archforge_diagram::grid::{bounds_of, middle_of};
-#[cfg(any())] // AR-796 parked
 use archforge_diagram::{LabelPlace, diagram, edge, label, node, node_tree};
-#[cfg(any())] // AR-796 parked
 use archforge_mof::{Obj, Uuid, Value};
-#[cfg(any())] // AR-796 parked
 use archforge_notations::differences::{Apart, ChangeKind, DiagramSide, DiagramSides, Difference, Placing, shown_name};
-#[cfg(any())] // AR-796 parked
 use egui::{Align2, CornerRadius, Key, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use super::cards::{self, BAND, EYEBROW, GUTTER};
-#[cfg(any())] // AR-796 parked
 use super::related;
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
-#[cfg(any())] // AR-796 parked
 use crate::canvas::{Live, Scene, State, View, ZOOM_RANGE, draw_scene, fit, real, refs};
-#[cfg(any())] // AR-796 parked
 use crate::i18n::{fmt, tr, trn};
-#[cfg(any())] // AR-796 parked
 use crate::settings::{control, focus_ring};
-#[cfg(any())] // AR-796 parked
 use crate::ux::{self, Palette, types};
 use crate::version_details::MARGIN;
-#[cfg(any())] // AR-796 parked
 use crate::versions::kind_look;
-#[cfg(any())] // AR-796 parked
 use crate::widgets::{Registry, egui_id, record_visible};
 
 /// A mark's width around a box or along a line.
 const MARK: f32 = 2.0;
 /// A mark's label's room around its word.
-#[cfg(any())] // AR-796 parked
 const LABEL_PAD: Vec2 = vec2(6.0, 2.0);
 /// The Model and Layout cards' height, the gap between them and the room under them.
 const APART: f32 = 92.0;
@@ -46,10 +31,6 @@ const APART_GAP: f32 = 16.0;
 const UNDER_APART: f32 = 18.0;
 /// How far an arrow key moves both sides, and how much + and − zoom them.
 const STEP: f32 = 40.0;
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 const ZOOM_STEP: f32 = 1.25;
 
 /// Draws the two sides side by side from `top` to the end of `r`. Everything comes from the sides
@@ -84,7 +65,6 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
 /// closes: a drag or the wheel over either pane moves both, a pinch or the wheel with the command key
 /// zooms both about the pointer, and a pane with the keys moves both by the arrows, zooms by + and −
 /// and fits both again by 0. Each pane is read before either is drawn, so the two never differ.
-#[cfg(any())] // AR-796 parked
 fn navigate(shell: &mut Shell, ui: &egui::Ui, panes: [(&str, Rect, bool); 2], fitted: (f32, Vec2)) -> ((f32, Vec2), [Option<Response>; 2]) {
     let shown = shell.versions.element.as_ref().and_then(|o| o.nav);
     let (mut zoom, mut pan) = shown.unwrap_or(fitted);
@@ -126,7 +106,6 @@ fn navigate(shell: &mut Shell, ui: &egui::Ui, panes: [(&str, Rect, bool); 2], fi
 
 /// `(zoom, pan)` zoomed by `factor` about `at`, a point of a pane, so what is under it stays there:
 /// out no further than `least` or the canvas's least zoom, whichever is less, and in no further than the canvas's most.
-#[cfg(any())] // AR-796 parked
 fn zoomed((zoom, pan): (f32, Vec2), factor: f32, at: Vec2, least: f32) -> (f32, Vec2) {
     if !factor.is_finite() || factor <= 0.0 || factor == 1.0 {
         return (zoom, pan);
@@ -138,7 +117,6 @@ fn zoomed((zoom, pan): (f32, Vec2), factor: f32, at: Vec2, least: f32) -> (f32, 
 /// What the keys pressed this frame ask of a pane that has them: how far to move both sides, by how
 /// much to zoom them, and whether to fit them again. Only without the command, control or option
 /// key, so the window's chords on the same keys stay the window's.
-#[cfg(any())] // AR-796 parked
 fn keys(ui: &egui::Ui) -> (Vec2, f32, bool) {
     ui.input(|i| {
         let (mut by, mut factor, mut fit) = (Vec2::ZERO, 1.0, false);
@@ -163,14 +141,12 @@ fn keys(ui: &egui::Ui) -> (Vec2, f32, bool) {
 }
 
 /// The part of a side's pane `card` the diagram is drawn in, under its band.
-#[cfg(any())] // AR-796 parked
 fn body_of(card: Rect) -> Rect {
     Rect::from_min_max(pos2(card.left(), (card.top() + BAND).min(card.bottom())), card.max)
 }
 
 /// One of the cards above the sides in `at`, registered under `area`: what it is about, its headline
 /// and the names or sentence under it, read whole on hover. Names are in the accent colour, a sentence is not.
-#[cfg(any())] // AR-796 parked
 fn said_apart(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, at): (&str, Rect), (what, head, detail, names): &(String, String, String, bool)) {
     let paint = ui.painter();
     paint.rect_filled(at, 10.0, p.surface);
@@ -185,12 +161,6 @@ fn said_apart(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, at): (&str, 
 
 /// `items` one after another in one buffer, the empty ones left out, with what `template` puts
 /// between its `{first}` and `{then}` between each two; that is worked out once for the whole list.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 fn listed<'a>(template: &str, items: impl Iterator<Item = &'a str>) -> String {
     let between = fmt(template, &[("first", ""), ("then", "")]);
     let mut all = String::new();
@@ -251,7 +221,6 @@ pub(super) fn apart_words(apart: &Apart) -> [(String, String, String, bool); 2] 
 
 /// The one zoom and pan both sides are drawn with: what fits all either side draws into `size`.
 /// Neither comes from the project or the canvas, so how someone last looked at it is never a difference.
-#[cfg(any())] // AR-796 parked
 fn framing(sides: &DiagramSides, size: Vec2) -> (f32, Vec2) {
     let mut fitted = State::default();
     // Below the canvas's least zoom too, so both sides start with all of either in view.
@@ -262,7 +231,6 @@ fn framing(sides: &DiagramSides, size: Vec2) -> (f32, Vec2) {
 /// The rectangle around what `side` draws: every box, nested ones too, as nothing keeps them inside
 /// their parent, every line, whose bends can reach past the boxes, and where each line's labels were
 /// put, however far from it. A label's own size is left to the margin.
-#[cfg(any())] // AR-796 parked
 fn extent(side: &DiagramSide) -> Option<Rect> {
     let (store, point) = (&side.store, |(x, y): (f64, f64)| Rect::from_min_size(pos2(x as f32, y as f32), Vec2::ZERO));
     let tree = refs(store, side.diagram, diagram::NODE).into_iter().flat_map(|top| node_tree(store, top));
@@ -285,7 +253,6 @@ fn extent(side: &DiagramSide) -> Option<Rect> {
 /// control when the diagram is on this side. A side the diagram is not on is a tinted pane saying so:
 /// nothing yet on an added diagram's Before, Removed on a removed one's After. A mark that links to
 /// its element's change and is followed puts that change in `go`.
-#[cfg(any())] // AR-796 parked
 fn pane(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -325,7 +292,6 @@ fn pane(
 
 /// Draws the side's diagram read-only: no selection, gesture or problem. It records under the side's
 /// own ids, as both sides hold the same boxes and lines.
-#[cfg(any())] // AR-796 parked
 fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&str, Rect, &View), on_it: &DiagramSide) {
     let (notations, none, clean) = (shell.notations.view(), BTreeMap::new(), BTreeMap::new());
     let kind = crate::kinds::kind_of(shell, &on_it.store, on_it.diagram);
@@ -356,7 +322,6 @@ fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&
 
 /// Marks what differs on this side: an outline round a box, the line drawn over in the change's
 /// colour, and the change in words on each, linked through `rows`, the comparison's changes by element.
-#[cfg(any())] // AR-796 parked
 fn marks(
     shell: &mut Shell,
     clip: &egui::Ui,
@@ -391,7 +356,6 @@ fn marks(
 /// The change in words, placed by its `corner` at `at` in `view`, naming `o`, whose id is `id`, to
 /// whoever reads it out or hovers. When `rows` holds a change of the element `o` draws, the words
 /// link to its row: a click or Enter puts it in `go`, and the keys reaching it out of sight move both sides to it.
-#[cfg(any())] // AR-796 parked
 fn label(
     shell: &mut Shell,
     clip: &egui::Ui,

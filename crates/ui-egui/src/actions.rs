@@ -11,7 +11,6 @@ use crate::i18n::{tr, tr_ctx};
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, edit_menu, model_menu, view_menu};
 
 pub const ABOUT: &str = "app.about";
@@ -72,7 +71,6 @@ pub struct InSearch {
 }
 
 /// Every action. Keys are looked at in this order, and Home's search lists its rows in it.
-#[cfg(any())] // AR-796 parked
 pub static ACTIONS: &[Action] = &[
     Action { id: ABOUT, label: |_| tr("About Archforge…"), available: |_| true, run: Shell::open_about, keys: None, search: None },
     Action {
@@ -416,7 +414,6 @@ pub(crate) fn after_field(shell: &mut Shell, then: impl FnOnce(std::path::PathBu
 
 /// Closes the project shown, after the field with the keyboard lets go, so Close asks about a name
 /// typed in place.
-#[cfg(any())] // AR-796 parked
 fn close(shell: &mut Shell) {
     after_field(shell, Then::Close, Shell::close_project);
 }

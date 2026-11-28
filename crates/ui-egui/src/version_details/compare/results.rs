@@ -10,24 +10,18 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use archforge_mof::Frozen;
-#[cfg(any())] // AR-796 parked
 use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
-#[cfg(any())] // AR-796 parked
 use archforge_notations::differences::{Area, ClassifyError, Difference, classified};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use super::Side;
-#[cfg(any())] // AR-796 parked
 use crate::explorer::{TreeScroll, scroll_tree};
-#[cfg(any())] // AR-796 parked
 use crate::i18n::{tr, trn};
 use crate::settings::{Look, button, control};
 use crate::ux::{self, Palette, types};
-#[cfg(any())] // AR-796 parked
 use crate::version_details::{Found, MARGIN, about, not_compared, scroll_keys};
 use crate::version_load::{MOST_KEPT_BYTES, bytes_of};
-#[cfg(any())] // AR-796 parked
 use crate::{Shell, VersionRead, VersionReadError};
 
 /// A difference's card, the distance between cards, and what a group adds to its cards: its heading
@@ -93,7 +87,6 @@ pub(crate) struct Failure {
     pub(crate) origin: Origin,
 }
 
-#[cfg(any())] // AR-796 parked
 impl From<String> for Failure {
     /// Words alone are a comparison that failed, which Retry may mend.
     fn from(why: String) -> Self {
@@ -108,7 +101,6 @@ pub(crate) type Answer = Result<Arc<Vec<Difference>>, Failure>;
 /// The read, of a version in a project and session, is never let go before it answers: a host read
 /// cannot be called back and counts against the host's limit until it ends, so Compare never has
 /// more than this one under way, whatever was opened and closed meanwhile.
-#[cfg(any())] // AR-796 parked
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
@@ -140,7 +132,6 @@ fn revision_of(sides: &Sides, work: Option<u64>) -> Option<u64> {
 /// Lets go of all but the read once the project or session shown is another, or none is, and takes
 /// the answers that have come. Also once a frame before drawing, as Home and a project closed draw
 /// no rail to call [`keep`]: an answer nobody wants is dropped there too, its rows with it.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn let_go(shell: &mut Shell) {
     let about = about(shell);
     let r = &mut shell.versions.compare_results;
@@ -172,7 +163,6 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
 }
 
 /// The answer on `rx`, if it has come; a read that ended without one is a failure.
-#[cfg(any())] // AR-796 parked
 fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T, E>> {
     match rx.try_recv() {
         Err(TryRecvError::Empty) => None,
@@ -185,7 +175,6 @@ fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T,
 /// of, however alike another opened at the same path; what nobody wants is dropped. Rows that have only moved on still show what they were, or a steady
 /// stream of edits would hide every answer; a failure for them says nothing of the newest rows,
 /// which the next comparison takes.
-#[cfg(any())] // AR-796 parked
 fn take_answers(shell: &mut Shell) {
     let (now, work) = (sides(shell), shell.current_work().map(|s| s.revision()));
     let r = &mut shell.versions.compare_results;
@@ -308,7 +297,6 @@ enum Got {
 /// that cannot be built fail the comparison with their reason, and one past the comparison's budget
 /// is too large, with no partial list. Both are repaired by `repair` as an opening repairs a model.
 /// The model's root is no change of its own.
-#[cfg(any())] // AR-796 parked
 fn compare(
     notations: &'static archforge_notations::Notations,
     before: Got,
@@ -336,8 +324,6 @@ fn compare(
 }
 
 /// What a comparison that could not classify says: too large past its budget, a failure otherwise.
-#[cfg(any())] // AR-796 parked
-#[cfg(any())] // AR-796 parked
 pub(crate) fn failure(e: ClassifyError) -> Failure {
     let origin = if matches!(e, ClassifyError::Compare(CompareError::TooLarge { .. })) { Origin::TooLarge } else { Origin::Comparison };
     Failure { why: e.to_string(), origin }
@@ -378,7 +364,6 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 }
 
 /// The left edge and width of what is drawn in `r`.
-#[cfg(any())] // AR-796 parked
 fn column(r: Rect) -> (f32, f32) {
     (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0))
 }
@@ -397,7 +382,6 @@ fn say(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, head: &str, body:
 }
 
 /// Bars in place of the cards while the comparison of `sides` is under way, and Stop under them.
-#[cfg(any())] // AR-796 parked
 fn loading(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, sides: Sides) {
     let (left, width) = column(r);
     let area = Rect::from_min_size(pos2(left, r.top()), vec2(width, SKELETON_CARDS as f32 * PITCH));
@@ -419,7 +403,6 @@ fn stop(shell: &mut Shell, sides: Sides) {
 }
 
 /// That the pair was not compared, in `words`, why on hover when there is a why, and Retry.
-#[cfg(any())] // AR-796 parked
 fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (words, why): (&str, &str)) {
     let (left, width) = column(r);
     let at = Rect::from_min_size(pos2(left, r.top()), vec2((width - 80.0).max(0.0), 28.0));
@@ -434,7 +417,6 @@ fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (words, why): 
 
 /// How many differences there are, by area, and the cards in their groups (model elements, diagrams,
 /// then skills), scrolling under that, by the keys too while no panel's menu and no dialog is up.
-#[cfg(any())] // AR-796 parked
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Difference]) {
     let (left, width) = column(r);
     let count = |area| items.iter().filter(|d| d.area == area).count();

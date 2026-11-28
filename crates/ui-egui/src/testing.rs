@@ -24,7 +24,6 @@ use crate::hold::HoldRefused;
 use crate::leaving::Leaving;
 use crate::project_search::Entry;
 use crate::theme::ThemeKind;
-#[cfg(any())] // AR-796 parked
 use crate::{BranchEntry, Services, Shell, widgets};
 
 /// The whole window in a harness at the design's frame size, in English and the appearance

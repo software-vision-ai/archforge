@@ -18,7 +18,6 @@ use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use ux::Colour;
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::actions::{
     self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, REDO, SAVE, SAVE_VERSION,

@@ -655,7 +655,6 @@ impl State {
 
 /// The look for the programs at start, once, when the host has the service and the system runs
 /// agents. It reads no key: the secure store is left alone until agents are used.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn start(shell: &mut crate::Shell) {
     if shell.agents.asked {
         return;
@@ -664,12 +663,10 @@ pub(crate) fn start(shell: &mut crate::Shell) {
     look_programs(shell);
 }
 
-#[cfg(any())] // AR-796 parked
 fn host(shell: &crate::Shell) -> Option<std::sync::Arc<dyn AgentHost>> {
     shell.services.agents.clone().filter(|h| h.system() == System::Supported)
 }
 
-#[cfg(any())] // AR-796 parked
 fn look_programs(shell: &mut crate::Shell) {
     let Some(host) = host(shell) else { return };
     if shell.agents.looking.is_none() {
@@ -678,7 +675,6 @@ fn look_programs(shell: &mut crate::Shell) {
 }
 
 /// Starts a read of the keys from the secure store, unless one runs already.
-#[cfg(any())] // AR-796 parked
 fn read_keys(shell: &mut crate::Shell) {
     let Some(host) = host(shell) else { return };
     if shell.agents.keys_reading.is_none() {
@@ -689,7 +685,6 @@ fn read_keys(shell: &mut crate::Shell) {
 
 /// Reads the keys from the secure store the first time they are needed (the AI Agents page, or
 /// Chat); afterwards the answer is kept. A local read that sends nothing.
-#[cfg(any())] // AR-796 parked
 pub fn need_keys(shell: &mut crate::Shell) {
     if !shell.agents.keys_known {
         read_keys(shell);
@@ -697,7 +692,6 @@ pub fn need_keys(shell: &mut crate::Shell) {
 }
 
 /// Looks again for the programs and reads the keys again (Look again); sends nothing.
-#[cfg(any())] // AR-796 parked
 pub fn look(shell: &mut crate::Shell) {
     look_programs(shell);
     read_keys(shell);
@@ -705,7 +699,6 @@ pub fn look(shell: &mut crate::Shell) {
 
 /// Check connection: the local look and Codex's account read again (once the look has found the
 /// program), then a badge that sums up each agent. It sends nothing.
-#[cfg(any())] // AR-796 parked
 pub fn check_connection(shell: &mut crate::Shell) {
     look(shell);
     reread_account(shell);
@@ -717,7 +710,6 @@ pub fn check_connection(shell: &mut crate::Shell) {
 }
 
 /// Saves `provider`'s key from what was typed.
-#[cfg(any())] // AR-796 parked
 pub fn save_key(shell: &mut crate::Shell, provider: Provider, key: KeyText) {
     let Some(host) = shell.services.agents.clone() else { return };
     let i = provider.index();
@@ -731,7 +723,6 @@ pub fn save_key(shell: &mut crate::Shell, provider: Provider, key: KeyText) {
 }
 
 /// Removes `provider`'s key.
-#[cfg(any())] // AR-796 parked
 pub fn remove_key(shell: &mut crate::Shell, provider: Provider) {
     let Some(host) = shell.services.agents.clone() else { return };
     let i = provider.index();
@@ -745,7 +736,6 @@ pub fn remove_key(shell: &mut crate::Shell, provider: Provider) {
 /// Reads Codex's account the first time it is needed: the AI Agents page shows, or a Codex
 /// conversation starts. Never at launch, as reading it starts the codex program. Once the look has
 /// found the program it is read at once; before, it is read when the look answers.
-#[cfg(any())] // AR-796 parked
 pub fn need_account(shell: &mut crate::Shell) {
     if shell.agents.account_wanted {
         return;
@@ -759,7 +749,6 @@ pub fn need_account(shell: &mut crate::Shell) {
 /// expired while Archforge runs shows so without a restart. A read under way answers for it; while
 /// the look runs, the look's answer starts it. Never at launch, as reading it starts the codex
 /// program.
-#[cfg(any())] // AR-796 parked
 pub fn reread_account(shell: &mut crate::Shell) {
     shell.agents.account_wanted = true;
     shell.agents.account_stale = true;
@@ -770,7 +759,6 @@ pub fn reread_account(shell: &mut crate::Shell) {
 /// account shows expired at once, with the email known, and is read again (AR-222). Until a
 /// sign-in or a sign-out, a read that still says signed in as that email shows it expired, as the
 /// codex program may read a sign-in it cannot refresh without trying to.
-#[cfg(any())] // AR-796 parked
 pub fn sign_in_expired(shell: &mut crate::Shell) {
     shell.agents.expired_seen = true;
     if let Some(Ok(CodexAccount::SignedIn { email, .. })) = &shell.agents.codex {
@@ -781,7 +769,6 @@ pub fn sign_in_expired(shell: &mut crate::Shell) {
 
 /// Starts the read again that was asked, once neither the look nor a read runs: a read already
 /// under way may have started before the sign-in changed, so it is read once more after it.
-#[cfg(any())] // AR-796 parked
 fn read_when_idle(shell: &mut crate::Shell) {
     if !shell.agents.account_stale || shell.agents.looking.is_some() || shell.agents.reading.is_some() {
         return;
@@ -795,7 +782,6 @@ fn read_when_idle(shell: &mut crate::Shell) {
 /// shows expired, as that email or, when no email was known yet, as the first one read; another
 /// account read as signed in clears what the conversation found. Remembers the email; a sign-out
 /// forgets it.
-#[cfg(any())] // AR-796 parked
 fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountError>) {
     let a = &mut shell.agents;
     let account = match account {
@@ -825,7 +811,6 @@ fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountE
 }
 
 /// Send test message: one short message to the default agent's provider.
-#[cfg(any())] // AR-796 parked
 pub fn send_test(shell: &mut crate::Shell) {
     let Some(accounts) = host(shell) else { return };
     if shell.agents.testing.is_some() {
@@ -837,7 +822,6 @@ pub fn send_test(shell: &mut crate::Shell) {
 }
 
 /// Starts signing Codex in with ChatGPT.
-#[cfg(any())] // AR-796 parked
 pub fn sign_in(shell: &mut crate::Shell, way: LoginWay) {
     let Some(accounts) = host(shell) else { return };
     if shell.agents.login.is_some() {
@@ -848,7 +832,6 @@ pub fn sign_in(shell: &mut crate::Shell, way: LoginWay) {
 }
 
 /// Stops the sign-in under way.
-#[cfg(any())] // AR-796 parked
 pub fn cancel_sign_in(shell: &mut crate::Shell) {
     if shell.agents.login.take().is_some()
         && let Some(accounts) = host(shell)
@@ -858,7 +841,6 @@ pub fn cancel_sign_in(shell: &mut crate::Shell) {
 }
 
 /// Signs Codex out.
-#[cfg(any())] // AR-796 parked
 pub fn sign_out(shell: &mut crate::Shell) {
     let Some(accounts) = host(shell) else { return };
     shell.agents.login_error = None;
@@ -868,7 +850,6 @@ pub fn sign_out(shell: &mut crate::Shell) {
 /// Keeps the account a sign-in or a sign-out just made: a read of the account that began before it
 /// is dropped unanswered, so its older answer never undoes it, and a read again asked before is
 /// done with. A Check connection that waited only for that read ends now, with the new account.
-#[cfg(any())] // AR-796 parked
 fn account_changed(shell: &mut crate::Shell, account: CodexAccount) {
     shell.agents.reading = None;
     shell.agents.account_stale = false;
@@ -879,7 +860,6 @@ fn account_changed(shell: &mut crate::Shell, account: CodexAccount) {
 }
 
 /// Starts reading Codex's account once the look found the program, unless a read runs already.
-#[cfg(any())] // AR-796 parked
 fn read_account(shell: &mut crate::Shell) {
     if shell.agents.reading.is_some() || !shell.agents.look.codex.found() {
         return;
@@ -890,7 +870,6 @@ fn read_account(shell: &mut crate::Shell) {
 }
 
 /// How ready `p` is now.
-#[cfg(any())] // AR-796 parked
 pub fn readiness(shell: &crate::Shell, p: Provider) -> Readiness {
     let a = &shell.agents;
     match a.look.program(p) {
@@ -924,7 +903,6 @@ pub fn readiness(shell: &crate::Shell, p: Provider) -> Readiness {
 }
 
 /// Ends Check connection: the badge sums up each agent as it is now.
-#[cfg(any())] // AR-796 parked
 fn finish_check(shell: &mut crate::Shell) {
     shell.agents.checking = false;
     let agents = Provider::ALL.iter().map(|p| (*p, readiness(shell, *p))).collect();
@@ -934,7 +912,6 @@ fn finish_check(shell: &mut crate::Shell) {
 /// Takes in what the host has answered; once per frame. A sign-in's page opens in the browser
 /// through `ctx` when it is the codex program's sign-in host; a sign-in or a sign-out done drops an
 /// account read that began before it.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
     if let Some(rx) = &shell.agents.looking {
         match rx.try_recv() {

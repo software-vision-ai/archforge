@@ -19,7 +19,6 @@ use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::panels::MenuId;
 use crate::settings::{Look, button, control, focus_ring};
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{BranchEntry, Shell, VersionEntry, VersionRead, VersionsPage, widgets};
 
 /// The versions read at a time.
@@ -479,7 +478,6 @@ fn follow_keys(shell: &mut Shell, ui: &egui::Ui) {
 
 /// Branches from `y`: its header, folded while there is only `main`, each branch's row, scrolling
 /// when they are many, and that branches can't be merged. Gives where the next section starts.
-#[cfg(any())] // AR-796 parked
 fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let mut listed = shell.versions.branches.clone().unwrap_or_default();
     // The mark moves with a switch at once; the rest of a list read before it stays until the next.
@@ -894,7 +892,6 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
 }
 
 /// History from `y`: its header, the banner of a failed read, and the bars, the words or the rows.
-#[cfg(any())] // AR-796 parked
 fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     let count = shell.versions.page.as_ref().filter(|page| !page.versions.is_empty()).map(|page| {
         let more = if page.more { "+" } else { "" };
@@ -983,7 +980,6 @@ fn skeleton(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
 /// The versions, newest first, scrolling under the headers: a long list has the filter over it
 /// and Show more, or why the next page could not be read, under it. Over the first version `main`
 /// has too, a divider says the line is shared from there; until a page holds one, there is none.
-#[cfg(any())] // AR-796 parked
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, rows: &[VersionEntry]) {
     let more = shell.versions.page.as_ref().is_some_and(|page| page.more);
     let mut top = top;

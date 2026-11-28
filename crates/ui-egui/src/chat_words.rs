@@ -307,7 +307,6 @@ pub fn verb(command: Option<&str>, changed_model: bool, status: ToolStatus) -> V
 /// A row's words: its label ("Read diagram Commerce", "Changed Customer", "Read 8 elements") and
 /// its detail ("2 lines", "description", "refused"), the elements counted as the notations `uis`
 /// count them.
-#[cfg(any())] // AR-796 parked
 pub fn tool_words(uis: &[&'static dyn NotationUi], facts: &ToolFacts) -> (String, Option<String>) {
     let detail_of = |d: Option<String>| match facts.status {
         ToolStatus::Done => d,

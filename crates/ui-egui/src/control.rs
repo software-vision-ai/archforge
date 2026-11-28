@@ -38,7 +38,6 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use serde_json::{Value, json};
 
 use crate::i18n::tr;
-#[cfg(any())] // AR-796 parked
 use crate::{SaveState, Shell};
 
 /// One request from the control channel, where its answer goes, and whether it may still run: the

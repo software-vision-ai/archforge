@@ -13,7 +13,6 @@ use crate::close_ask::Ask;
 use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, button, control};
 use crate::ux::{self, Palette, icons, types};
-#[cfg(any())] // AR-796 parked
 use crate::{BranchCounts, BranchEntry, BranchRefused, ProjectHost, Shell, widgets};
 
 /// The most characters the field takes: more than a name may hold, so a long paste shows as too
@@ -181,7 +180,6 @@ fn counted(shell: &mut Shell, ctx: &egui::Context) {
 /// delete, and reads the branches again. Done, the dialog closes and a new branch is gone to;
 /// refused, the dialog says why. Either only while the dialog is up over the session it was asked
 /// over.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
     counted(shell, ctx);
     let Some(making) = shell.versions.making.as_ref() else { return };
@@ -233,7 +231,6 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
 /// starts at, to rename the branch the dialog renames to it, or to delete the branch `name`. Before a creation or a rename of the
 /// branch in use, as before a switch and a save, the skill text and description being typed are
 /// kept and handed over first; one that can't be kept stops it, its reason under the field.
-#[cfg(any())] // AR-796 parked
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
     let Some(Ask::Branch { path, naming, .. }) = shell.ask.as_ref() else { return };
     let (renaming, deleting, start) = (naming.renaming.clone(), naming.deleting.is_some(), naming.start.clone());
@@ -265,7 +262,6 @@ fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
 
 /// Keeps the host's `answer` to what the dialog asked for the branch `name`: made, renamed from
 /// `renaming`, or deleted. The dialog waits for it.
-#[cfg(any())] // AR-796 parked
 fn made(shell: &mut Shell, name: String, renaming: Option<String>, answer: Receiver<Result<(), BranchRefused>>) {
     let Some(Ask::Branch { path, generation, naming }) = shell.ask.as_mut() else { return };
     let deleting = naming.deleting.is_some();
@@ -276,7 +272,6 @@ fn made(shell: &mut Shell, name: String, renaming: Option<String>, answer: Recei
 /// Draws the dialog over the window and acts on it. While a creation, rename or delete is on its
 /// way nothing closes it and nothing more is asked. Escape closes it pressed alone; with a modifier
 /// it is the name field's.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
     let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|o| o.path.clone())) else {
         shell.ask = None;

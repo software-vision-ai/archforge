@@ -8,7 +8,6 @@ use archforge_mof::{Universe, Uuid};
 use archforge_notations::differences::{Area, ChangeKind, Difference};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
 use crate::model_words::kind_label;

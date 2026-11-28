@@ -11,7 +11,6 @@ use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, icons, types};
 use crate::versions::{last_saved, settled};
-#[cfg(any())] // AR-796 parked
 use crate::{SaveState, Shell, widgets};
 
 const WIDTH: f32 = 480.0;
@@ -36,7 +35,6 @@ pub struct Dialog {
 }
 
 /// What the dialog is about now: the project shown and its session.
-#[cfg(any())] // AR-796 parked
 fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }

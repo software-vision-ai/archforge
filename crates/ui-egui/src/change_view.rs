@@ -14,7 +14,6 @@ use archforge_mof::Uuid;
 use archforge_notations::differences::{Area, ChangeKind, DiagramSides, Difference, ElementSides, diagram_sides, element_sides};
 use egui::{Rect, pos2, vec2};
 
-#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::explorer::TreeScroll;
 use crate::i18n::{fmt, tr};
@@ -159,7 +158,6 @@ fn start_read(shell: &mut Shell) {
 
 /// Draws the open element in `r` while Versions is the explorer; false leaves `r` to the canvas. Under
 /// the header: why it could not be read, bars, or its two cards.
-#[cfg(any())] // AR-796 parked
 pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let v = &shell.versions;
     let Some(o) = v.element.as_ref().filter(|_| shell.state.explorer == Explorer::SourceControl) else { return false };
