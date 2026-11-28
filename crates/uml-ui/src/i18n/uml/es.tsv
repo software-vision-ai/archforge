@@ -831,3 +831,20 @@ str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	Clase de asociación · {package}
+# Access letters of the menu bar in the window (Windows and Linux): one letter A to Z per title (menu.*) and row (its action), different within a menu, the titles different across the bar; best one of the label's own letters, else it shows in brackets after the label.
+str	access	model.class	L
+str	access	model.interface	I
+str	access	model.enumeration	U
+str	access	model.data-type	T
+str	access	model.primitive-type	P
+str	access	model.package	Q
+str	access	model.relate.association	O
+str	access	model.relate.directed	A
+str	access	model.relate.aggregation	G
+str	access	model.relate.composition	M
+str	access	model.relate.generalization	Z
+str	access	model.relate.dependency	D
+str	access	model.relate.realization	R
+str	access	model.relate.association-class	C
+str	access	model.relate.n-ary	S
+str	access	model.relate.template-binding	V

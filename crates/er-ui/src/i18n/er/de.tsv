@@ -340,3 +340,6 @@ str		{name} is in the index twice. Give each column once.	{name} steht zweimal i
 str		Give each index column as a column's id, or as an object with an attribute or an expression.	Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.
 str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.
 str		An index column needs a column or an expression to sort by.	Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert.
+# Access letters of the menu bar in the window (Windows and Linux): one letter A to Z per title (menu.*) and row (its action), different within a menu, the titles different across the bar; best one of the label's own letters, else it shows in brackets after the label.
+str	access	model.entity	E
+str	access	model.relationship	B

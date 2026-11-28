@@ -8895,6 +8895,15 @@ static SKETCH_ROWS: &[&[crate::kinds::ModelRow]] = &[
     &[crate::kinds::ModelRow { key: "model.sketch-inherit", word: || "Inherit".into(), tool: crate::canvas::Tool::Connect("inherit"), choice: None }],
 ];
 
+/// The second sketch's kinds' one row of the Model menu, so a row of another kind is told apart
+/// from the sketch kind's.
+static SECOND_SKETCH_MENU: &[&[crate::kinds::ModelRow]] = &[&[crate::kinds::ModelRow {
+    key: "model.second-sketch-class",
+    word: || "Second class".into(),
+    tool: crate::canvas::Tool::Place("class"),
+    choice: None,
+}]];
+
 impl crate::kinds::DiagramKind for SketchKind {
     /// The kind it was given, which no notation of the shell knows.
     fn kind(&self) -> &'static str {
@@ -8904,9 +8913,10 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn tools(&self) -> &'static [archforge_shell_api::kinds::KindTool] {
         SKETCH_TOOLS
     }
-    /// A row for each of its tools, each in a section of its own.
+    /// The sketch kind's: a row for each of its tools, each in a section of its own; another kind's
+    /// (the second sketch's), one row of its own.
     fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
-        SKETCH_ROWS
+        if self.0 == SKETCH { SKETCH_ROWS } else { SECOND_SKETCH_MENU }
     }
     /// Its name in the New diagram dialog.
     fn word(&self) -> String {

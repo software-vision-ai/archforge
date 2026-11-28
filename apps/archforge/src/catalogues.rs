@@ -404,10 +404,22 @@ fn reads() -> Vec<(Key, Reader)> {
             .into_iter()
             .map(|(index, s)| (str_key(&s), of_metamodel(index))),
     );
-    // The in-window menu bar's access letters, keyed by each title's and row's id.
-    reads.extend(
-        archforge_ui_egui::testing::access_keys(crate::SCREENS.kinds()).into_iter().map(|key| (key_of("str", "access", &key), module("menu_bar"))),
-    );
+    // The in-window menu bar's access letters, keyed by each title's and row's id: a diagram kind's
+    // Model menu row's read by the kind's notation, which declares the row, every other the shell's
+    // menu bar's.
+    let row_keys = |part: &archforge_shell_api::screens::ScreensPart| -> Vec<&'static str> {
+        part.kinds.iter().flat_map(|k| k.menu_rows().iter().flat_map(|section| section.iter().map(|row| row.key))).collect()
+    };
+    let notation_rows: Vec<(&str, Reader)> = crate::SCREENS
+        .parts()
+        .iter()
+        .enumerate()
+        .flat_map(|(part, screens)| row_keys(screens).into_iter().map(move |key| (key, Reader::Notation(part))))
+        .collect();
+    reads.extend(archforge_ui_egui::testing::access_keys(crate::SCREENS.kinds()).into_iter().map(|key| {
+        let reader = notation_rows.iter().find(|(row, _)| *row == key).map_or_else(|| module("menu_bar"), |(_, reader)| *reader);
+        (key_of("str", "access", &key), reader)
+    }));
     // The plurals the notations' cards say, which `trn` takes through their descriptions: read by
     // the notation whose crate holds them.
     let plurals = [("archforge_er", archforge_er::figures::PLURALS), ("archforge_uml", archforge_uml::PLURALS)];
