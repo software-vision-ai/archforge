@@ -2003,11 +2003,10 @@ fn a_kept_default_diagram_is_said_by_the_notations_handed() {
 
 /// What a skill aims at is said by the notation the shell registered for its kind, not the app's
 /// own list: over the app's notations each of ER's and UML's kinds in its notation's words, a
-/// column's type pattern in place of its word and a skill that names no kind with nothing; with
-/// the sketch answering for UML's metamodel, its own words for a skill for every class and, for
-/// every interface, which it has no words for, the shell's: nothing, as the skill has no type
-/// pattern. ER, which both lists hold, still says its own. The Skills panel's row says the same.
-/// In light and dark.
+/// column's type pattern in place of its word and a skill that names no kind with nothing; over ER
+/// alone, for every kind of UML's, which it has no words for, the shell's: nothing, as the skill
+/// has no type pattern. ER, which both lists hold, still says its own. The Skills panel's row says
+/// the same. In light and dark.
 #[test]
 fn a_skills_target_is_said_by_the_notation_the_shell_registered() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -2051,8 +2050,8 @@ fn skill_targets_ask_the_notation(theme: ThemeKind) {
     };
     assert_eq!(said(&h, archforge_ui_egui::testing::notation_uis(h.state())), cases.map(|(_, _, w)| w), "{theme:?}: the app's notations");
     let sketched = said(&h, ER_ALONE);
-    let want = ["every table", "every relationship", "every column", "VARCHAR", "every class of the sketch", "", "", "", "", "", "", "", "", ""];
-    assert_eq!(sketched, want, "{theme:?}: the sketch for UML's metamodel");
+    let want = ["every table", "every relationship", "every column", "VARCHAR", "", "", "", "", "", "", "", "", "", ""];
+    assert_eq!(sketched, want, "{theme:?}: ER alone");
     // The panel's row, on the package of the sample's classes.
     let pkg = {
         let st = h.state().session.as_ref().unwrap().doc();
@@ -2067,7 +2066,7 @@ fn skill_targets_ask_the_notation(theme: ThemeKind) {
     archforge_ui_egui::testing::set_notation_uis(h.state_mut(), ER_ALONE);
     h.run();
     let texts = painted(&h);
-    assert!(texts.iter().any(|t| t == "every class of the sketch") && !texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
+    assert!(!texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
 }
 
 /// A badge whose figure offers a way out shows the plus only where its element's notation says
@@ -2486,9 +2485,8 @@ fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
 }
 
 /// A model's kind words ask the notations the shell registered, not the app's own list: over the
-/// app's notations UML's attribute is an Attribute and its interface an Interface; with the sketch
-/// answering for UML's metamodel, which has no word of its own and creates only classes, the
-/// attribute and the interface are Elements and the class keeps its name.
+/// app's notations UML's attribute is an Attribute, its interface an Interface and its class a
+/// Class; over ER alone, which does not know UML's classes, each is an Element.
 #[test]
 fn a_models_kind_words_ask_the_notations_the_shell_registered() {
     archforge_ui_egui::i18n::set_language("en");
@@ -2499,5 +2497,5 @@ fn a_models_kind_words_ask_the_notations_the_shell_registered() {
         |shell: &Shell| classes.map(|c| archforge_ui_egui::model_words::kind_label(archforge_ui_egui::testing::notation_uis(shell), &universe, c));
     assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
     archforge_ui_egui::testing::set_notation_uis(&mut shell, ER_ALONE);
-    assert_eq!(words(&shell), ["Element", "Element", "Class"], "the sketch for UML's metamodel");
+    assert_eq!(words(&shell), ["Element", "Element", "Element"], "ER alone");
 }
