@@ -96,13 +96,13 @@ fn at(n: u64) -> String {
 }
 
 fn schema() -> ModelSchema {
-    let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
-    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
+    let universe = archforge_notations::fake::NOTATIONS.store(ids(0)).unwrap().universe().clone();
+    let (tables, junctions) = archforge_notations::fake::NOTATIONS.storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
 fn session() -> Session {
-    archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap()
+    archforge_notations::fake::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap()
 }
 
 fn run(s: &mut Session, cmd: &str, p: serde_json::Value, origin: Option<&str>) -> Uuid {
@@ -164,7 +164,7 @@ fn ended(turn: Uuid, when: u64, changes: Option<TurnChanges>) -> TurnEnd {
 }
 
 fn anchor(element: Uuid, role: AnchorRole, name: &str) -> NewAnchor {
-    NewAnchor { element, role, metaclass: "er_entity".into(), name: Some(name.into()) }
+    NewAnchor { element, role, metaclass: "sketch_class".into(), name: Some(name.into()) }
 }
 
 fn no_keys() -> MemoryStore {
@@ -199,13 +199,13 @@ fn a_conversation_is_made_answered_listed_newest_first_and_loaded_whole() {
     let call = NewToolCall {
         id: id(4),
         turn: id(2),
-        tool: "er_entity_rename".into(),
-        command: Some("er.entity.rename".into()),
+        tool: "sketch_class_rename".into(),
+        command: Some("sketch.class.rename".into()),
         detail: Some("name".into()),
         status: ToolStatus::Done,
         changed_model: true,
         element_count: Some(1),
-        arguments: Some(r#"{"entity":"…","name":"Client"}"#.into()),
+        arguments: Some(r#"{"class":"…","name":"Client"}"#.into()),
         result: Some(r#"{"id":"…"}"#.into()),
         error: None,
         anchors: vec![anchor(customer, AnchorRole::Target, "Client")],
@@ -216,7 +216,7 @@ fn a_conversation_is_made_answered_listed_newest_first_and_loaded_whole() {
     let changes = TurnChanges {
         changes: 1,
         elements: 1,
-        changed: vec![ChangedElement { element: customer, kind: ChangeKind::Changed, metaclass: "er_entity".into(), name: Some("Client".into()) }],
+        changed: vec![ChangedElement { element: customer, kind: ChangeKind::Changed, metaclass: "sketch_class".into(), name: Some("Client".into()) }],
     };
     p.end_turn(&ended(id(2), 4, Some(changes))).unwrap();
     // An ended turn takes nothing more.
@@ -248,7 +248,7 @@ fn a_conversation_is_made_answered_listed_newest_first_and_loaded_whole() {
     let tool = c.messages[1].tool.as_ref().unwrap();
     assert_eq!(
         (tool.tool.as_str(), tool.command.as_deref(), tool.status, tool.result_bytes),
-        ("er_entity_rename", Some("er.entity.rename"), ToolStatus::Done, Some(12)),
+        ("sketch_class_rename", Some("sketch.class.rename"), ToolStatus::Done, Some(12)),
         "the result's bytes"
     );
     assert_eq!(c.messages[1].anchors[0].role, AnchorRole::Target);
@@ -270,7 +270,7 @@ fn a_saved_project_shows_its_conversations_again_and_a_turn_left_running_is_inte
     let chat = one_turn(&p, 1, "Chat 1", 0);
     let before = p.load_chat(chat).unwrap();
     // A second turn is running when Archforge goes away: its question was written, not committed.
-    p.start_turn(&turn(10, chat, 5), &question(11, "Add a Loan entity"), &no_keys()).unwrap();
+    p.start_turn(&turn(10, chat, 5), &question(11, "Add a Loan class"), &no_keys()).unwrap();
     assert!(!uncommitted_chats(&p).is_empty());
     let path = p.path().to_path_buf();
     p.close().unwrap();
@@ -283,7 +283,7 @@ fn a_saved_project_shows_its_conversations_again_and_a_turn_left_running_is_inte
     assert_eq!(after.messages[0], before.messages[0]);
     let left = &after.turns[1].turn;
     assert_eq!((left.outcome, left.ended_at.as_deref()), (TurnOutcome::Interrupted, Some(at(60).as_str())));
-    assert_eq!(after.messages[1].message.body.as_deref(), Some("Add a Loan entity"), "a question sent is never lost");
+    assert_eq!(after.messages[1].message.body.as_deref(), Some("Add a Loan class"), "a question sent is never lost");
     assert_eq!(again.list_chats().unwrap().len(), 1);
     again.close().unwrap();
 }
@@ -294,15 +294,15 @@ fn dont_save_keeps_the_conversations_and_puts_the_model_back() {
     let schema = schema();
     let p = env.create("Commerce platform", &schema);
     let mut s = session();
-    run(&mut s, "er.schema.add", json!({ "name": "shop" }), None);
+    run(&mut s, "sketch.package.add", json!({ "name": "shop" }), None);
     let saved = rows_of(&s, &schema);
     p.write_model(&schema, &saved).unwrap();
     p.commit("Saved").unwrap();
     let chat = one_turn(&p, 1, "Chat 1", 0);
     // The agent's model edit, written and not saved, and a turn still running with a reply.
-    run(&mut s, "er.schema.add", json!({ "name": "crm" }), Some("Chat 1"));
+    run(&mut s, "sketch.package.add", json!({ "name": "crm" }), Some("Chat 1"));
     p.write_model(&schema, &rows_of(&s, &schema)).unwrap();
-    p.start_turn(&turn(10, chat, 5), &question(11, "Add a schema"), &no_keys()).unwrap();
+    p.start_turn(&turn(10, chat, 5), &question(11, "Add a package"), &no_keys()).unwrap();
     p.append_reply(&reply(12, id(10), "Added crm.", 6)).unwrap();
     assert!(p.has_unsaved().unwrap());
     p.discard(&at(7)).unwrap();
@@ -326,9 +326,9 @@ fn a_save_commits_the_model_alone_and_the_project_opens_again_whole() {
     let p = env.create("Commerce platform", &schema);
     let chat = one_turn(&p, 1, "Chat 1", 0);
     // A turn half-way: its rows are written, and a Save meanwhile commits only the model.
-    p.start_turn(&turn(10, chat, 5), &question(11, "Add a schema"), &no_keys()).unwrap();
+    p.start_turn(&turn(10, chat, 5), &question(11, "Add a package"), &no_keys()).unwrap();
     let mut s = session();
-    run(&mut s, "er.schema.add", json!({ "name": "shop" }), Some("Chat 1"));
+    run(&mut s, "sketch.package.add", json!({ "name": "shop" }), Some("Chat 1"));
     let model = rows_of(&s, &schema);
     p.write_model(&schema, &model).unwrap();
     assert!(p.commit("Saved").unwrap());
@@ -418,7 +418,7 @@ fn a_failed_save_is_judged_on_the_branch_it_started_on() {
     let p = env.create("Earlier", &schema());
     p.create_chat(&new_chat(1, "Chat 1", 0), &no_keys()).unwrap();
     p.start_turn(&turn(2, id(1), 1), &question(3, "Add"), &no_keys()).unwrap();
-    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Added, metaclass: "er_schema".into(), name: Some("shop".into()) }];
+    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Added, metaclass: "sketch_package".into(), name: Some("shop".into()) }];
     p.end_turn(&ended(id(2), 2, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
     p.commit("Saved").unwrap();
     let mut c = sql(&p);
@@ -428,7 +428,7 @@ fn a_failed_save_is_judged_on_the_branch_it_started_on() {
     c.query_drop("USE `project/elsewhere`").unwrap();
     c.query_drop("CALL DOLT_COMMIT('--allow-empty', '-m', 'Another head')").unwrap();
     c.query_drop("USE `project/edited`").unwrap();
-    c.query_drop("CREATE TABLE er_extra (id INT PRIMARY KEY)").unwrap();
+    c.query_drop("CREATE TABLE sketch_extra (id INT PRIMARY KEY)").unwrap();
     let edited = SafeBranch::found("edited").unwrap();
     p.set_current_branch(edited.clone());
     p.set_change_states(&[(id(2), ChangeState::Undone)], &at(3)).unwrap();
@@ -457,7 +457,7 @@ fn a_format_2_project_without_conversations_stays_format_2() {
     let p = env.open(&path, &schema);
     p.open_chats(&at(0)).unwrap();
     let mut s = session();
-    run(&mut s, "er.schema.add", json!({ "name": "shop" }), None);
+    run(&mut s, "sketch.package.add", json!({ "name": "shop" }), None);
     p.write_model(&schema, &rows_of(&s, &schema)).unwrap();
     assert!(p.commit("Saved").unwrap());
     assert!(!p.commit_chats().unwrap(), "nothing of the conversations to commit");
@@ -497,7 +497,7 @@ fn deleting_a_conversation_removes_its_rows_and_leaves_the_others() {
     let call = NewToolCall {
         id: id(4),
         turn: id(2),
-        tool: "er_entity_get".into(),
+        tool: "sketch_class_get".into(),
         command: None,
         detail: None,
         status: ToolStatus::Done,
@@ -510,7 +510,7 @@ fn deleting_a_conversation_removes_its_rows_and_leaves_the_others() {
         now: at(2),
     };
     p.append_tool_call(&call).unwrap();
-    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "er_entity".into(), name: None }];
+    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "sketch_class".into(), name: None }];
     p.end_turn(&ended(id(2), 3, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
     let kept = one_turn(&p, 10, "Chat 2", 5);
     p.delete_chat(gone).unwrap();
@@ -562,7 +562,7 @@ fn whole_chat(p: &Project, n: u64, origin: &str, when: u64) -> Uuid {
         id: id(n + 3),
         turn: id(n + 1),
         tool: "engine.execute".into(),
-        command: Some("er.entity.rename".into()),
+        command: Some("sketch.class.rename".into()),
         detail: Some("name".into()),
         status: ToolStatus::Done,
         changed_model: true,
@@ -575,7 +575,7 @@ fn whole_chat(p: &Project, n: u64, origin: &str, when: u64) -> Uuid {
     };
     p.append_tool_call(&call).unwrap();
     p.append_reply(&reply(n + 4, id(n + 1), "Renamed.", when + 3)).unwrap();
-    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "er_entity".into(), name: Some("Client".into()) }];
+    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "sketch_class".into(), name: Some("Client".into()) }];
     p.end_turn(&ended(id(n + 1), when + 4, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
     chat
 }
@@ -597,7 +597,7 @@ fn a_deletion_is_one_chat_only_commit_the_rows_stay_in_history_and_undo_brings_e
     let kept = whole_chat(&p, 20, "Chat 2", 10);
     // The person's own model change, written and not saved.
     let mut s = session();
-    run(&mut s, "er.schema.add", json!({ "name": "crm" }), None);
+    run(&mut s, "sketch.package.add", json!({ "name": "crm" }), None);
     let model = rows_of(&s, &schema);
     p.write_model(&schema, &model).unwrap();
     assert!(p.has_unsaved().unwrap());
@@ -762,15 +762,15 @@ fn change_links_follow_undo_redo_and_dont_save() {
     let chat = id(1);
     p.create_chat(&new_chat(1, "Chat 1", 0), &no_keys()).unwrap();
     // A turn whose edits carry the conversation's origin (AR-198).
-    p.start_turn(&turn(2, chat, 1), &question(3, "Add a shop schema with an entity"), &no_keys()).unwrap();
+    p.start_turn(&turn(2, chat, 1), &question(3, "Add a shop package with a class"), &no_keys()).unwrap();
     let before = s.revision();
-    let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }), Some("Chat 1"));
-    let order = run(&mut s, "er.entity.add", json!({ "schema": shop.to_string(), "name": "Order" }), Some("Chat 1"));
+    let shop = run(&mut s, "sketch.package.add", json!({ "name": "shop" }), Some("Chat 1"));
+    let order = run(&mut s, "sketch.class.add", json!({ "package": shop.to_string(), "name": "Order" }), Some("Chat 1"));
     let first = TurnSpan { before, after: s.revision() };
     assert_eq!(s.undo_origin(), Some("Chat 1"));
     let changed = vec![
-        ChangedElement { element: shop, kind: ChangeKind::Added, metaclass: "er_schema".into(), name: Some("shop".into()) },
-        ChangedElement { element: order, kind: ChangeKind::Added, metaclass: "er_entity".into(), name: Some("Order".into()) },
+        ChangedElement { element: shop, kind: ChangeKind::Added, metaclass: "sketch_package".into(), name: Some("shop".into()) },
+        ChangedElement { element: order, kind: ChangeKind::Added, metaclass: "sketch_class".into(), name: Some("Order".into()) },
     ];
     p.end_turn(&ended(id(2), 2, Some(TurnChanges { changes: 2, elements: 2, changed }))).unwrap();
     p.write_model(&schema, &rows_of(&s, &schema)).unwrap();
@@ -792,8 +792,9 @@ fn change_links_follow_undo_redo_and_dont_save() {
     // Undone again, unsaved; and a second turn after the save.
     p.set_change_states(&[(id(2), ChangeState::Undone)], &at(5)).unwrap();
     p.start_turn(&turn(10, chat, 6), &question(11, "Add Customer"), &no_keys()).unwrap();
-    let customer = run(&mut s, "er.entity.add", json!({ "schema": shop.to_string(), "name": "Customer" }), Some("Chat 1"));
-    let changed = vec![ChangedElement { element: customer, kind: ChangeKind::Added, metaclass: "er_entity".into(), name: Some("Customer".into()) }];
+    let customer = run(&mut s, "sketch.class.add", json!({ "package": shop.to_string(), "name": "Customer" }), Some("Chat 1"));
+    let changed =
+        vec![ChangedElement { element: customer, kind: ChangeKind::Added, metaclass: "sketch_class".into(), name: Some("Customer".into()) }];
     p.end_turn(&ended(id(10), 7, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
     assert!(matches!(p.set_change_states(&[(id(99), ChangeState::Undone)], &at(8)), Err(Error::ChatMissing { .. })), "no change link");
     // Don't save: each goes back to its state at the save; the later turn's changes are discarded.
@@ -859,8 +860,9 @@ fn the_limits_refuse_what_a_person_asked_for_and_cut_what_an_agent_produced() {
         now: at(3),
     };
     p.append_tool_call(&call).unwrap();
-    let changed: Vec<ChangedElement> =
-        (0..2_100).map(|n| ChangedElement { element: id(30_000 + n), kind: ChangeKind::Added, metaclass: "er_entity".into(), name: None }).collect();
+    let changed: Vec<ChangedElement> = (0..2_100)
+        .map(|n| ChangedElement { element: id(30_000 + n), kind: ChangeKind::Added, metaclass: "sketch_class".into(), name: None })
+        .collect();
     p.end_turn(&ended(id(2), 4, Some(TurnChanges { changes: 2_100, elements: 2_200, changed }))).unwrap();
     let c = p.load_chat(chat).unwrap();
     let asked = &c.messages[0];
@@ -988,7 +990,7 @@ fn a_failed_turn_runs_again_in_place_with_its_question_stored_once() {
     let changes = TurnChanges {
         changes: 1,
         elements: 1,
-        changed: vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "uml_class".into(), name: Some("Order".into()) }],
+        changed: vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "sketch_class".into(), name: Some("Order".into()) }],
     };
     p.end_turn(&TurnEnd { turn: id(10), outcome: TurnOutcome::Failed, error: Some(TurnError::Other), now: at(10), changes: Some(changes) }).unwrap();
     let again = Rerun { turn: id(10), ..rerun(None, 11) };
@@ -1019,8 +1021,8 @@ fn an_anchor_to_a_deleted_element_is_kept_with_its_snapshot_and_lives_again_afte
     let schema = schema();
     let p = env.create("Commerce platform", &schema);
     let mut s = session();
-    let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }), None);
-    let customer = run(&mut s, "er.entity.add", json!({ "schema": shop.to_string(), "name": "Customer" }), None);
+    let shop = run(&mut s, "sketch.package.add", json!({ "name": "shop" }), None);
+    let customer = run(&mut s, "sketch.class.add", json!({ "package": shop.to_string(), "name": "Customer" }), None);
     p.write_model(&schema, &rows_of(&s, &schema)).unwrap();
     p.commit("Saved").unwrap();
     p.create_chat(&new_chat(1, "Chat 1", 0), &no_keys()).unwrap();
@@ -1029,12 +1031,12 @@ fn an_anchor_to_a_deleted_element_is_kept_with_its_snapshot_and_lives_again_afte
     p.start_turn(&turn(2, id(1), 1), &q, &no_keys()).unwrap();
     p.end_turn(&ended(id(2), 2, None)).unwrap();
     // The element is deleted and the deletion saved: the anchor stays, with its snapshot.
-    run(&mut s, "er.entity.remove", json!({ "entity": customer.to_string() }), None);
+    run(&mut s, "element.remove", json!({ "ids": [customer.to_string()] }), None);
     assert!(s.doc().by_uuid(customer).is_none());
     p.write_model(&schema, &rows_of(&s, &schema)).unwrap();
     p.commit("Saved").unwrap();
     let a = &p.load_chat(id(1)).unwrap().messages[0].anchors[0];
-    assert_eq!((a.element, a.name.as_deref(), a.metaclass.as_str(), a.role), (customer, Some("Customer"), "er_entity", AnchorRole::Selection));
+    assert_eq!((a.element, a.name.as_deref(), a.metaclass.as_str(), a.role), (customer, Some("Customer"), "sketch_class", AnchorRole::Selection));
     assert!(uncommitted_chats(&p).is_empty(), "deleting an element writes nothing to the conversations");
     // Undo brings it back under the same UUID, so the anchor is live again.
     s.undo().unwrap();
@@ -1048,7 +1050,7 @@ fn damaged_conversations_are_refused_with_a_reason_and_never_block_the_model() {
     let schema = schema();
     let p = env.create("Damaged", &schema);
     let mut s = session();
-    run(&mut s, "er.schema.add", json!({ "name": "shop" }), None);
+    run(&mut s, "sketch.package.add", json!({ "name": "shop" }), None);
     let model = rows_of(&s, &schema);
     p.write_model(&schema, &model).unwrap();
     p.commit("Saved").unwrap();
@@ -1183,8 +1185,8 @@ fn an_older_chat_row_without_the_chips_column_reads_as_none_removed() {
 
 #[test]
 fn a_model_table_may_not_take_a_conversations_name() {
-    let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
-    let (mut tables, junctions) = archforge_notations::NOTATIONS.storage();
+    let universe = archforge_notations::fake::NOTATIONS.store(ids(0)).unwrap().universe().clone();
+    let (mut tables, junctions) = archforge_notations::fake::NOTATIONS.storage();
     tables[0].name = "chat_note";
     assert!(ModelSchema::new(&universe, tables, junctions).is_err_and(|e| e.contains("chat_note")));
 }

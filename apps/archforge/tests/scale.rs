@@ -1,5 +1,7 @@
 //! A measurement, not a check: how a project of every notation's tables (ER's and all of UML's)
-//! is created, written, read and saved. Run with `cargo test -p archforge-project --test scale -- --ignored --nocapture`.
+//! is created, written, read and saved. It measures the real notations' tables, so it lives in the
+//! app, the one crate that holds them all (ADR 0005). Run with
+//! `cargo test -p archforge --test scale -- --ignored --nocapture`.
 #![cfg(unix)]
 
 use std::time::{Duration, Instant};

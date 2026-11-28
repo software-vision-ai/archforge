@@ -94,6 +94,9 @@ archforge-er-ui = { workspace = true, features = ["snapshot"] }
 # and what the screenshot tool reaches in UML's screens.
 archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 craft-testkit.workspace = true
+# ER's and UML's saved models (`tests/saved_model.rs`) read and shape a project's database
+# through its server.
+mysql.workspace = true
 # The headless harness of the window tests and of the screenshot tool's own tests.
 egui_kittest = { workspace = true, features = ["wgpu"] }
 

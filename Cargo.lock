@@ -277,6 +277,7 @@ dependencies = [
  "getrandom 0.3.4",
  "log",
  "muda",
+ "mysql",
  "png",
  "rfd",
  "serde",
@@ -429,15 +430,11 @@ dependencies = [
 name = "archforge-project"
 version = "0.14.0"
 dependencies = [
- "archforge-core",
- "archforge-diagram",
  "archforge-dolt",
- "archforge-er",
  "archforge-mof",
  "archforge-names",
  "archforge-notations",
  "archforge-secrets",
- "archforge-uml",
  "log",
  "mysql",
  "serde_json",
