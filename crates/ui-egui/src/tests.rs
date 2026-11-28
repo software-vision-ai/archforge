@@ -8861,11 +8861,26 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     assert!(filled, "the card is filled in its own colour");
 }
 
-/// What the sketch kind's hooks were asked, in order.
-static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+thread_local! {
+    /// What the sketch kind's hooks were asked on this thread, in order. Every shell test is given
+    /// the sketch kind and each test runs on a thread of its own, so a test reads only what its own
+    /// shell asked: another test's place, connect or rename, run in parallel, never lands here.
+    static SKETCH_CALLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 
-/// The rows the sketch kind was asked to open a class named [`SKETCH_OPENS`] at, in order.
-static SKETCH_OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    /// The rows the sketch kind was asked on this thread to open a class named [`SKETCH_OPENS`] at,
+    /// in order.
+    static SKETCH_OPENED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Writes down what a sketch kind's hook was asked, in this test's own log.
+fn sketch_call(call: String) {
+    SKETCH_CALLS.with_borrow_mut(|calls| calls.push(call));
+}
+
+/// What the sketch kind's hooks were asked in this test so far, in order.
+fn sketch_calls() -> Vec<String> {
+    SKETCH_CALLS.with_borrow(Clone::clone)
+}
 
 /// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
 /// Inherit tool that connects, each hook writing down what it was asked. It serves the diagram kind
@@ -8976,7 +8991,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     /// Writes down the tool it was asked to place with.
     fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
-        SKETCH_CALLS.lock().unwrap().push(format!("place {tool}"));
+        sketch_call(format!("place {tool}"));
     }
     /// Writes down the tool and the names of the two nodes' elements it was asked to connect.
     fn connect(&self, cx: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
@@ -8987,11 +9002,11 @@ impl crate::kinds::DiagramKind for SketchKind {
                 Some(archforge_core::name_of(st, e))
             })
         };
-        SKETCH_CALLS.lock().unwrap().push(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
+        sketch_call(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
     }
     /// Writes down the tool of a line dropped on empty canvas.
     fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
-        SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
+        sketch_call(format!("connect to new {tool}"));
     }
     /// Its own popover of kinds, which the arrow keys walk, so a test sees whose kind is asked; no
     /// other.
@@ -9001,7 +9016,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     /// Writes down the name typed in place, and gives it to a class through the fake notation's
     /// rename.
     fn rename(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, name: &str) -> Result<(), String> {
-        SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
+        sketch_call(format!("rename {name}"));
         let class = cx
             .session
             .as_ref()
@@ -9017,7 +9032,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn open(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, row: Option<usize>) {
         let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(element).map(|e| archforge_core::name_of(s.doc(), e)));
         let calls = if name.as_deref() == Some(SKETCH_OPENS) { &SKETCH_OPENED } else { &SKETCH_CALLS };
-        calls.lock().unwrap().push(format!("open {row:?}"));
+        calls.with_borrow_mut(|calls| calls.push(format!("open {row:?}")));
     }
     /// Its lines' ends take handles, which move nothing and say its own words on hover, so a test
     /// sees it asked.
@@ -9033,7 +9048,7 @@ impl crate::kinds::DiagramKind for SketchKind {
             keys: "F",
             live: false,
             first: true,
-            run: |_, _| SKETCH_CALLS.lock().unwrap().push("menu first".into()),
+            run: |_, _| sketch_call("menu first".into()),
         };
         let own = crate::kinds::MenuRow {
             key: "sketch-own",
@@ -9043,7 +9058,7 @@ impl crate::kinds::DiagramKind for SketchKind {
             first: false,
             run: |cx, menu| {
                 let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(menu.element).map(|e| archforge_core::name_of(s.doc(), e)));
-                SKETCH_CALLS.lock().unwrap().push(format!("menu own {}", name.unwrap_or_default()));
+                sketch_call(format!("menu own {}", name.unwrap_or_default()));
             },
         };
         (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
@@ -9231,7 +9246,7 @@ fn the_element_menu_builds_from_the_kinds_answer() {
         let (mut h, _d, a, b, _e) = sketch_harness();
         h.state_mut().state.theme = theme;
         h.run();
-        SKETCH_CALLS.lock().unwrap().clear();
+        SKETCH_CALLS.with_borrow_mut(Vec::clear);
         let (party, customer) = (rect_of(&h, &format!("workspace.canvas.node.{a}")), rect_of(&h, &format!("workspace.canvas.node.{b}")));
         right_click(&mut h, customer.center());
         assert!(h.state().canvas.menu.is_none(), "{theme:?}: Customer takes no menu");
@@ -9244,12 +9259,12 @@ fn the_element_menu_builds_from_the_kinds_answer() {
         assert!(["Sketch first", "F", "Sketch own", "Alt S"].iter().all(|t| texts.iter().any(|p| p == t)), "{theme:?}: {texts:?}");
         let at = rect_of(&h, "workspace.canvas.menu.sketch-first").center();
         click(&mut h, at);
-        assert!(h.state().canvas.menu.is_none() && SKETCH_CALLS.lock().unwrap().is_empty(), "{theme:?}: a row that is off runs nothing");
+        assert!(h.state().canvas.menu.is_none() && sketch_calls().is_empty(), "{theme:?}: a row that is off runs nothing");
         right_click(&mut h, party.center());
         let at = rect_of(&h, "workspace.canvas.menu.sketch-own").center();
         click(&mut h, at);
         assert!(h.state().canvas.menu.is_none(), "{theme:?}: the menu closed");
-        assert_eq!(*SKETCH_CALLS.lock().unwrap(), ["menu own Party"], "{theme:?}");
+        assert_eq!(sketch_calls(), ["menu own Party"], "{theme:?}");
     }
 }
 
@@ -9259,7 +9274,7 @@ static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
     let (mut h, _d, a, b, _e) = sketch_harness();
-    SKETCH_CALLS.lock().unwrap().clear();
+    SKETCH_CALLS.with_borrow_mut(Vec::clear);
     // ER's tool, left on from an ER diagram, is not the sketch's: the toolbar hands back to Select.
     h.state_mut().canvas.tool = crate::canvas::Tool::Place("entity");
     h.run();
@@ -9305,10 +9320,7 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         h.step();
     }
     double_click(&mut h, party.left_top() + egui::vec2(100.0, 77.0 + 6.0));
-    assert_eq!(
-        *SKETCH_CALLS.lock().unwrap(),
-        ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
-    );
+    assert_eq!(sketch_calls(), ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]);
 }
 
 /// A diagram kind's own words on the shared canvas, a kind the shell never names included: its
@@ -9601,10 +9613,10 @@ fn a_double_click_on_a_card_a_kind_opens_whole_opens_its_editor() {
         for _ in 0..45 {
             h.step();
         }
-        SKETCH_OPENED.lock().unwrap().clear();
+        SKETCH_OPENED.with_borrow_mut(Vec::clear);
         double_click(&mut h, header);
         assert!(h.state().canvas.rename.is_none(), "{theme:?}: {:?}", h.state().canvas.rename);
-        assert_eq!(*SKETCH_OPENED.lock().unwrap(), ["open None"], "{theme:?}");
+        assert_eq!(SKETCH_OPENED.with_borrow(Clone::clone), ["open None"], "{theme:?}");
     });
 }
 
