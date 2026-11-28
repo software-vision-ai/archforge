@@ -8976,6 +8976,11 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn word(&self) -> String {
         "Sketch".into()
     }
+    /// A table: neither the other kind's icon nor the one the shell draws for a diagram of no kind
+    /// it knows, so a test sees which was drawn.
+    fn icon(&self) -> &'static crate::ux::Icon {
+        &crate::ux::icons::TABLE
+    }
     /// Its group in the Diagrams explorer: "Sketches" for the fake notation's kind, and for another
     /// its own, after its name ("Second sketches" for `test.second`), so kinds are told apart.
     fn group_word(&self) -> String {
@@ -9895,7 +9900,8 @@ fn the_canvas_keys_on_the_selection_are_asked_of_every_notation() {
 /// The New diagram dialog asks the kind it is on: from a group's `+`, only that kind is asked
 /// whether it is of the element selected, so the sketch's group keeps the sketch though the other
 /// kind, registered first, is of it; the dialog's details are the sketch's words. With no kind
-/// chosen, every kind is asked, and the other kind, which is of it, is chosen.
+/// chosen, every kind is asked, and the other kind, which is of it, is chosen with it, though it
+/// is registered second.
 #[test]
 fn the_new_diagram_dialog_asks_the_kind_it_is_on() {
     let (mut h, ..) = sketch_harness();
@@ -9913,41 +9919,57 @@ fn the_new_diagram_dialog_asks_the_kind_it_is_on() {
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "New sketch") && texts.iter().any(|t| t == "Package"), "the sketch's words: {texts:?}");
     assert!(!texts.iter().any(|t| t.contains("other")), "none of the other kind's: {texts:?}");
+    // With no kind chosen, every kind is asked, and the one that is of the selection is chosen:
+    // the other kind, registered after the sketch's here, so the first kind, which the dialog
+    // falls back to, is not it.
     h.state_mut().diagrams.new = None;
+    h.state_mut().kinds = SKETCH_THEN_OTHER;
     crate::diagrams::open_new(h.state_mut());
     h.run();
-    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(OTHER_KIND), "with no kind chosen, the kind that is of it");
+    let new = h.state().diagrams.new.as_ref().map(|n| (n.kind, n.owner));
+    assert_eq!(new, Some((OTHER_KIND, archforge_mof::Uuid::parse(&own))), "with no kind chosen, the kind that is of it, of it");
 }
 
-/// The Diagrams explorer draws each kind's group with that kind's icon: the sketch's group not
-/// with the other kind's, registered first.
+/// The sketch's kind first, then the other kind, for a test whose answer the first kind must not
+/// give.
+static SKETCH_THEN_OTHER: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &OtherKind];
+
+/// The Diagrams explorer draws each kind's group with the icon that kind gives, the sketch's group
+/// not with the other kind's, registered first, nor with the folder the shell draws for a kind it
+/// does not know, and the other kind's group with its own.
 #[test]
 fn each_kinds_group_has_its_own_icon() {
     let (mut h, ..) = sketch_harness();
     h.state_mut().state.explorer = crate::state::Explorer::Diagrams;
     h.run();
-    // What is drawn where a group row's icon goes, by its size.
-    let icon = |h: &Harness<'static, Shell>, kind: &str| {
-        let row = rect_of(h, &format!("workspace.diagrams.group.{kind}"));
-        let mut strokes: Vec<(i32, i32)> = h
-            .output()
-            .shapes
+    // The sizes of what is drawn within `area`, sorted.
+    let sizes = |shapes: &[egui::epaint::ClippedShape], area: egui::Rect| {
+        let mut sizes: Vec<(i32, i32)> = shapes
             .iter()
             .map(|c| c.shape.visual_bounding_rect())
-            .filter(|b| {
-                b.is_positive()
-                    && b.min.x >= row.left() + 18.0
-                    && b.max.x <= row.left() + 44.0
-                    && b.center().y > row.top()
-                    && b.center().y < row.bottom()
-            })
+            .filter(|b| b.is_positive() && area.contains_rect(*b))
             .map(|b| ((b.width() * 4.0) as i32, (b.height() * 4.0) as i32))
             .collect();
-        strokes.sort_unstable();
-        strokes
+        sizes.sort_unstable();
+        sizes
     };
-    let (sketch, other) = (icon(&h, SKETCH), icon(&h, OTHER_KIND));
-    assert!(!sketch.is_empty() && sketch != other, "{sketch:?} against {other:?}");
+    // What a group row draws where its icon goes.
+    let drawn = |h: &Harness<'static, Shell>, kind: &str| {
+        let row = rect_of(h, &format!("workspace.diagrams.group.{kind}"));
+        sizes(&h.output().shapes, egui::Rect::from_x_y_ranges(row.left() + 18.0..=row.left() + 44.0, row.y_range()))
+    };
+    // What `icon` draws alone, as a row draws an icon.
+    let alone = |icon: &'static crate::ux::Icon| {
+        let mut h = Harness::new_ui(move |ui| crate::ux::icon_mid(ui.painter(), egui::pos2(100.0, 100.0), icon, crate::ux::palette(false).text));
+        h.run();
+        sizes(&h.output().shapes, egui::Rect::from_center_size(egui::pos2(100.0, 100.0), egui::Vec2::splat(40.0)))
+    };
+    for kind in SKETCH_KINDS {
+        assert_eq!(drawn(&h, kind.kind()), alone(kind.icon()), "{}'s group draws its own icon", kind.kind());
+    }
+    assert_ne!(alone(&crate::ux::icons::TABLE), alone(&crate::ux::icons::CUBE), "the two kinds' icons are told apart");
+    assert_ne!(alone(&crate::ux::icons::TABLE), alone(&crate::ux::icons::FOLDER), "and from the folder");
+    assert_ne!(alone(&crate::ux::icons::CUBE), alone(&crate::ux::icons::FOLDER), "both");
 }
 
 /// A class held over a Models row is ringed as the row's own notation answers, not the notation
@@ -17098,7 +17120,11 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
         shell.canvas.popover = Some(popover);
         assert!(crate::kinds::popover_takes_keys(shell), "{kind}'s popover takes the keys");
     }
-    assert_eq!(crate::kinds::diagram_icon(shell.kinds, store, diagram), &crate::ux::icons::ER_DIAGRAM, "the sketch's icon, not the other kind's");
+    assert_eq!(
+        crate::kinds::diagram_icon(shell.kinds, store, diagram),
+        &crate::ux::icons::TABLE,
+        "the sketch's icon, neither the other kind's nor the shell's for a kind it does not know"
+    );
     shell.canvas.popover = Some(SECOND_KINDS);
     assert!(!crate::kinds::popover_takes_keys(shell), "the second sketch is not the shell's");
     assert!(archforge_shell_api::kinds::popover_takes_keys(others, &shell.canvas), "the second sketch's kind walks them");
